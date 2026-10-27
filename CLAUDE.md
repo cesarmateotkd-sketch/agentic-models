@@ -43,11 +43,10 @@ A handoff whose `**Playbook:**` line says "Change the app" is a change request f
 Whenever a job finishes (its handoff is handled) or a merge goes live, post the next job from the backlog below as a job card, so there's always one waiting for the owner's RUN. Only one open job at a time unless the owner asks for more. Jobs never publish anything; publishing still needs the owner's approval. Put all the context the team needs in `task`, including real data (GSC numbers with dates, page URLs), because the free models don't know Strand's post numbers or pages and can't browse.
 
 Strand backlog (top first; update it as items close):
-1. Post 57, best curl creams for type 4 hair: outline (job `post57-outline`, posted Oct 27), then Claude researches and builds it, then a `factcheck` job on the draft and a `compliance` job before the preview
-2. Post 57 pins: a `visual` job, then a `pins` job, then a `critique` job on the Canva pins
-3. Near-page-1 tuning (GSC positions 4–20): title and intro rewrites for "3b vs 3c", "does 4c hair grow slower", protein-treatment frequency, and the sulfate-free shampoo questions (`outline` jobs with the GSC rows)
-4. "Crawled, not indexed" posts (4A routine, how to wash 4C, protective styles, how to find your hair type, scalp care, baggy method): what sets each apart, or which to merge (custom-team job with each page's URL and its closest rival)
-5. Pins for Post 56 (silk press at home), if the owner still needs them
+1. Post 57 pins: `visual` done (job `post57-visual`, Oct 27; Claude made the 3 concepts in Canva), then a `pins` job (titles and descriptions), then a `critique` job on the Canva pins
+2. Near-page-1 tuning (GSC positions 4–20): title and intro rewrites for "3b vs 3c", "does 4c hair grow slower", protein-treatment frequency, and the sulfate-free shampoo questions (`outline` jobs with the GSC rows)
+3. "Crawled, not indexed" posts (4A routine, how to wash 4C, protective styles, how to find your hair type, scalp care, baggy method): what sets each apart, or which to merge (custom-team job with each page's URL and its closest rival)
+4. Pins for Post 56 (silk press at home), if the owner still needs them
 
 ### Mission
 ⚙ → Mission holds a shared brief (the Strand mission by default) that is added to every teammate's system prompt as background. It always yields to the owner's task, and it's left out of "Change the app" runs and the decision summary. The owner set it as the main mission on Oct 27, 2026, with the condition that it must not interfere with their other commands. Keep that precedence wording if you change it.
