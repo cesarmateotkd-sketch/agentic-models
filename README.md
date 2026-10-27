@@ -63,7 +63,7 @@ Characters are 16×20 shaded pixel sprites with front, back and side views. They
 
 When a provider says it's busy ("try again in 24s", "high demand"), the app waits and retries up to twice, with a countdown in the status line. Limits that don't say how long to wait, or need more than a minute (like a used-up daily quota), aren't retried; the writer moves to another provider instead.
 
-If a playbook's writer fails (wrong model name, rate limit), it tries once more on another connected provider. Judges wait until there's a draft, and a run with no draft sends nothing to Claude.
+If a playbook's writer fails (wrong model name, rate limit), it tries once more on another connected provider. Pin critique only moves to models that can see images: Gemini 2.5 Pro, then Mistral if you've added a Mistral key. Judges wait until there's a draft, and a run with no draft sends nothing to Claude.
 
 ## Interns (teammates delegating work)
 

@@ -1076,10 +1076,13 @@ fieldset:disabled .lock{display:block}
     $("roundsLabel").hidden = !!pb;
   }
   $("playbook").addEventListener("change", onPlaybook);
+  // models that accept images, in the order a failed image reviewer tries them
+  const VISION_BACKUPS = [{ provider: "gemini", model: "gemini-2.5-pro" }, { provider: "mistral", model: "mistral-medium-latest" }];
   const hasKey = p => p === "custom" ? !!conn.custom.base : !!conn[p]?.key;
   // a playbook teammate whose provider has no key moves to a connected one, so a single key is enough to run any playbook
   const buildCrew = pb => pb.crew.map(spec => {
     if (hasKey(spec.provider)) return Object.assign({}, spec);
+    if (spec.vision) return Object.assign({}, spec, VISION_BACKUPS.find(o => hasKey(o.provider)) || {});
     const p = ["gemini", "groq", "mistral", "openrouter"].find(hasKey);
     return Object.assign({}, spec, p ? { provider: p, model: PROVIDERS[p].def } : {});
   });
@@ -1268,12 +1271,21 @@ Every recommendation must say why: the target search phrase and intent, the data
           let res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
           // a playbook writer whose model fails gets one more try on another connected provider
           if (res.err && res.err.name !== "AbortError" && pb && a.role === "builder") {
-            const alt = ["groq", "gemini", "mistral", "openrouter"].find(p => p !== a.provider && hasKey(p));
-            if (alt) {
+            // a writer that reads images only moves to a model that can see them
+            const alts = a.vision ? VISION_BACKUPS : ["groq", "gemini", "mistral", "openrouter"].map(p => ({ provider: p, model: PROVIDERS[p].def }));
+            const tried = [a.provider + "/" + a.model];
+            // an image reviewer tries every model that can see images; any other writer gets one more try
+            for (let k = 0; k < (a.vision ? alts.length : 1) && res.err && res.err.name !== "AbortError"; k++) {
+              const alt = alts.find(o => !tried.includes(o.provider + "/" + o.model) && (a.vision || o.provider !== a.provider) && hasKey(o.provider));
               const why = isNetErr(res.err) ? "couldn't reach " + PROVIDERS[a.provider].name : res.err.message;
+              if (!alt) {
+                if (a.vision) res.err = new Error(why + " Image review needs a model that can see images (Gemini, or Mistral with a key). Try again in a minute.");
+                break;
+              }
+              tried.push(alt.provider + "/" + alt.model);
               skipped.push({ name: a.name, msg: why });
-              logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, why + " Trying " + PROVIDERS[alt].name + " instead.");
-              crew[i] = a = Object.assign({}, a, { provider: alt, model: PROVIDERS[alt].def });
+              logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, why + " Trying " + PROVIDERS[alt.provider].name + " " + alt.model + " instead.");
+              crew[i] = a = Object.assign({}, a, alt);
               res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
             }
           }
