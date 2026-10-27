@@ -226,6 +226,15 @@ fieldset:disabled .lock{display:block}
       <select id="skin"><option value="office">Office (classic)</option><option value="matrix">Matrix</option><option value="tactics">Tactics (PSX)</option></select>
     </label></div>
   </section>
+  <details class="win" id="missionPanel">
+    <summary>Mission <span class="hint" id="missionState"></span></summary>
+    <div class="stack">
+      <div class="small">Background every teammate reads before a task. Your task always comes first: when they conflict, the team follows the task. It isn't used for Change the app requests or for the decision summary.</div>
+      <label class="check"><input type="checkbox" id="missionOn"> Use the mission</label>
+      <textarea id="missionText" aria-label="Mission text" style="min-height:220px"></textarea>
+      <div class="row"><button type="button" id="missionReset">Reset to default</button></div>
+    </div>
+  </details>
   <details class="win" id="teamPanel">
     <summary>Team <span class="hint" id="teamCount"></span></summary>
     <fieldset class="stack" id="teamFields">
@@ -929,7 +938,7 @@ fieldset:disabled .lock{display:block}
     if (!c.key && a.provider !== "custom") throw new Error("No " + P.name + " key. Add it under Connections.");
     if (!c.base && !P.base) throw new Error("No base URL for " + P.name + ". Add it under Connections.");
     const base = (c.base || P.base).replace(/\/+$/, "");
-    const system = "You are " + a.name + ", the " + (a.title || a.role) + " (" + a.role + ") on a team of AI agents from different companies working on one task. " + a.prompt;
+    const system = "You are " + a.name + ", the " + (a.title || a.role) + " (" + a.role + ") on a team of AI agents from different companies working on one task. " + a.prompt + missionFor(a);
     let r, j = null;
     if (P.kind === "gemini") {
       r = await fetch(base + "/models/" + encodeURIComponent(a.model) + ":generateContent?key=" + encodeURIComponent(c.key), {
@@ -1085,6 +1094,41 @@ fieldset:disabled .lock{display:block}
     return d;
   }
 
+  /* ================= mission ================= */
+  // Shared background for every teammate. It never overrides the owner's task, and Change the app runs and the
+  // decision summary don't get it, so it can't steer app work or bias the summary.
+  const DEFAULT_MISSION = `STRAND MISSION BRIEF (read before every task)
+
+Site: Strand, hairtypequiz.hair. A hair type quiz (1A–4C) that gives a personal routine, plus a blog of evidence-led posts on natural, curly, coily and wavy hair.
+
+Goal: grow from about 14 to 100+ visitors a day, so we can apply for AdSense, while earning Amazon Associates commissions. Our edge is trust: we lead with real evidence, not hype.
+
+Who we write for: people with curly and coily hair (especially type 4) who want routines and products that actually work for their hair type.
+
+What wins right now, in order:
+1. Topics with proven demand: real Search Console queries (impressions, position) and posts that already get clicks. Pages ranking just off page 1 get tuned before we write anything new.
+2. Product roundups for searches with buying intent. Curl creams convert best. Most Amazon clicks come from the quiz, so link to it where it fits.
+3. Pinterest is the main traffic channel: specific, keyword-first pins, every pin a different angle.
+
+Rules that are never broken:
+- Never invent studies, PMIDs, ratings, star counts, review counts or prices. A claim without a real source is marked "not studied".
+- No cure, miracle or guaranteed-results claims. No "you/your hair" personal-attribute framing in ads.
+- Affiliate disclosure in plain words, right next to the first product link.
+- Don't compete with our own posts: say which existing post a new one overlaps with and how they stay different.
+- Plain, warm, expert tone. Specific beats clever.
+
+Every recommendation must say why: the target search phrase and intent, the data behind it (or "no data given"), why this over the alternatives, and what is still unverified. Claude checks facts against PubMed and does the final build. Your job is sharp drafts and honest reasoning.`;
+  const mission = Object.assign({ on: true, text: DEFAULT_MISSION }, store.get("mission", {}));
+  const saveMission = () => { store.set("mission", mission); $("missionState").textContent = mission.on && mission.text.trim() ? "ON" : "OFF"; };
+  let activeMission = "";
+  $("missionOn").checked = mission.on; $("missionText").value = mission.text;
+  $("missionOn").addEventListener("change", () => { mission.on = $("missionOn").checked; saveMission(); });
+  $("missionText").addEventListener("change", () => { mission.text = $("missionText").value; saveMission(); });
+  $("missionReset").onclick = () => { mission.text = DEFAULT_MISSION; $("missionText").value = DEFAULT_MISSION; saveMission(); };
+  saveMission();
+  const missionFor = a => activeMission && a.title !== "Decision summary"
+    ? "\n\nBACKGROUND MISSION (context only; the owner's task and your instructions always come first, and if they conflict, follow the task):\n" + activeMission : "";
+
   /* ================= decision summary ================= */
   // After every run, one extra call explains why the team landed where it did, using only what was said in the run.
   const ARTICLE_PLAYBOOKS = ["outline", "factcheck", "compliance", "pins", "visual"];
@@ -1109,7 +1153,7 @@ fieldset:disabled .lock{display:block}
 
   let controller = null;
   // the Team editor is locked during a run: NPCs are bound to team slots, so edits mid-run would desync them
-  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("playbook").disabled = on; $("teamFields").disabled = on; $("led").classList.toggle("on", on); }
+  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("playbook").disabled = on; $("teamFields").disabled = on; $("missionText").disabled = on; $("missionOn").disabled = on; $("led").classList.toggle("on", on); }
   const isApproval = text => /^\W*APPROVED\b/i.test(text.split("\n")[0]);
 
   $("task").value = store.get("task", "");
@@ -1124,6 +1168,7 @@ fieldset:disabled .lock{display:block}
     if (controller) return;
     const pbKey = $("playbook").value, pb = PLAYBOOKS[pbKey];
     const crew = pb ? buildCrew(pb) : team.slice();
+    activeMission = mission.on && pbKey !== "appchange" ? mission.text.trim() : "";
     const task = pb ? input + "\n\n" + pb.brief + "\n\n" + (pb.rules || BRAND_RULES) : input;
     const missing = [...new Set(crew.filter(a => a.provider === "custom" ? !conn.custom.base : !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
     if (missing.length) { openSettings("connPanel"); status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under ⚙ Connections."; return; }
@@ -1268,7 +1313,7 @@ fieldset:disabled .lock{display:block}
       status.textContent = err.name === "AbortError" ? "STOPPED" : err.message;
       say("RELAY", null, err.name === "AbortError" ? "Meeting cancelled. Everyone back to your desks." : err.message);
       scene.allHome();
-    } finally { setRunning(false); controller = null; if (pb) scene.sync(team); }
+    } finally { setRunning(false); controller = null; activeMission = ""; if (pb) scene.sync(team); }
   });
   $("stop").onclick = () => controller?.abort();
 

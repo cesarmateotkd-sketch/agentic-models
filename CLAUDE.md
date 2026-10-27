@@ -12,7 +12,7 @@ Single-file static app (`AgentOffice.html`) on GitHub Pages, used from an iPhone
 
 ## Saved data must survive every update
 The user's keys persist across app updates only because the storage names stay the same. When changing the app:
-- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns; `jobs` also holds merge cards with `type: "merge"`), `skin` (`office`, `matrix` or `tactics`).
+- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns; `jobs` also holds merge cards with `type: "merge"`), `skin` (`office`, `matrix` or `tactics`), `mission` (`{on, text}`: the shared mission brief).
 - Don't rename provider ids (`openrouter`, `groq`, `gemini`, `mistral`, `custom`). If a provider is removed, its saved key is parked in `connParked` and comes back if the id returns.
 - If a shape has to change, read the old one and migrate it on load, then test with data saved by the previous version (see the upgrade test below).
 - The site must stay at the same origin (`cesarmateotkd-sketch.github.io`). Moving to another domain starts with empty storage.
@@ -38,6 +38,9 @@ Post a comment on PR #1 (as the owner's account, which is how the GitHub tools p
 
 ### "Change the app" handoffs
 A handoff whose `**Playbook:**` line says "Change the app" is a change request for this app, written by the free team from the owner's idea and sent automatically. Treat it as the owner asking for that change: build it on a `claude/*` branch, run the tests (including the upgrade test), reply on PR #1 with what changed and how to check it, with screenshots (see below), and merge to `main` only after the owner approves. If the request conflicts with the hard rules above, say so in the reply instead of building it.
+
+### Mission
+⚙ → Mission holds a shared brief (the Strand mission by default) that is added to every teammate's system prompt as background. It always yields to the owner's task, and it's left out of "Change the app" runs and the decision summary. The owner set it as the main mission on Oct 27, 2026, with the condition that it must not interfere with their other commands. Keep that precedence wording if you change it.
 
 ### Decision summaries (owner request, Oct 27, 2026)
 The owner wants to know why a decision was made, above all for articles posted on Strand.

@@ -53,7 +53,9 @@ If a playbook's provider has no key, that teammate moves to one you've connected
 
 **History** keeps your last 20 runs, saved step by step, so locking the phone or closing the app doesn't lose work. If the phone locks during a model call, the app retries that call once when you come back.
 
-**⚙ (top right)** holds the skin, your keys (Connections) and the custom team (Team).
+**⚙ (top right)** holds the skin, the Mission, your keys (Connections) and the custom team (Team).
+
+**Mission:** a shared brief (the Strand mission by default) that every teammate reads as background. Your task always comes first when they conflict, and it's left out of Change the app requests and the decision summary. Edit it, switch it off, or reset it under ⚙ → Mission.
 
 **Skins:** *Office* (classic) or *Matrix*: same layout, green code rain, agents in suits and sunglasses (their tie shows their role), and Neo, which is Claude, always in the room. The narrator becomes the Operator, and A/B are the red and blue pills. *Tactics (PSX)*: a stone war room with stained glass, a war map, torches and a crystal. Knights judge, Black Mages write and White Mages help, Claude is a blond hero in blue, the menus are parchment, and A/B become ○ and ×.
 
