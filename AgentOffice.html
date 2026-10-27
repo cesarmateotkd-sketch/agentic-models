@@ -991,12 +991,12 @@ fieldset:disabled .lock{display:block}
     pins: { label: "Pin batch", rounds: 2,
       hint: "Name the post (title and link) and how many pins you want (5–7).",
       placeholder: "e.g. 6 pins for “Silk press on 4C hair at home” https://hairtypequiz.hair/blog/silk-press-4c-hair-at-home.html",
-      brief: "DELIVERABLE: Pinterest pins for the post above, numbered. For each pin: ANGLE (every pin a genuinely different angle), TITLE (max 100 characters, main keyword in the first 40), DESCRIPTION (max 500 characters, natural keywords, no hashtag stuffing), TEXT OVERLAY (max 6 words), ALT TEXT.",
+      brief: "DELIVERABLE: Pinterest pins for the post above, numbered. For each pin: ANGLE (every pin a genuinely different angle), TARGET KEYWORD, TITLE (max 100 characters, main keyword in the first 40), DESCRIPTION (max 500 characters, natural keywords, no hashtag stuffing), TEXT OVERLAY (max 6 words), ALT TEXT.",
       crew: [GEMMA("Pin writer", "builder", "Write pin copy that is specific and useful, not clickbait. When there is feedback, return the full revised batch."), REX("Pin checker", "judge", CHECK_JUDGE)] },
     outline: { label: "Post outline", rounds: 2,
       hint: "Give the topic and the search phrase you want to rank for. Add notes or links if you have them.",
       placeholder: "e.g. Best curl creams for type 4 hair. Target: “best curl cream for 4c hair”. Link from best-curl-creams-natural-hair.",
-      brief: "DELIVERABLE: a blog post outline with: SEO TITLE (max 60 characters), META DESCRIPTION (max 155), H1, INTRO HOOK (2–3 sentences), H2/H3 structure with one line on what each section covers, a QUICK PICKS block if it's a roundup (Best for + a data column taken from the post's own evidence, no prices), an EVIDENCE PLAN listing each claim with the study to cite or \"not studied\", 3–5 FAQ questions, 3 INTERNAL LINK ideas to existing Strand posts, and where the affiliate disclosure goes (right next to the first product link).",
+      brief: "DELIVERABLE: a blog post outline with: SEO TITLE (max 60 characters), META DESCRIPTION (max 155), H1, INTRO HOOK (2–3 sentences), H2/H3 structure with one line on what each section covers, a QUICK PICKS block if it's a roundup (Best for + a data column taken from the post's own evidence, no prices), an EVIDENCE PLAN listing each claim with the study to cite or \"not studied\", 3–5 FAQ questions, 3 INTERNAL LINK ideas to existing Strand posts, where the affiliate disclosure goes (right next to the first product link), and an SEO RATIONALE: the target search phrase and its intent (what the searcher wants), the data behind choosing it from the task (impressions, position, clicks, or \"no data given\"), 3–5 secondary phrases, why this topic is worth writing now rather than another, and which existing Strand post it could compete with and how to keep them apart.",
       crew: [GEMMA("Outliner", "builder", "Outline posts that answer the searcher's question fast and prove claims with evidence. Return the full outline every time."), REX("Outline checker", "judge", CHECK_JUDGE)] },
     factcheck: { label: "Fact-check", rounds: 1,
       hint: "Paste the text to check. The team flags claims; Claude verifies the flagged ones against PubMed before anything is published.",
@@ -1095,8 +1095,8 @@ fieldset:disabled .lock{display:block}
     return "TASK GIVEN TO THE TEAM:\n" + task.split("\n\n")[0] + "\n\nTRANSCRIPT:\n" + transcript + "\n\nOUTCOME: " + verdictLine +
       (skipped.length ? "\nPROBLEMS: " + skipped.map(x => x.name + ": " + x.msg).join("; ") : "") +
       "\n\nWrite the summary with exactly these headings:\nWHAT WAS DECIDED: one sentence.\nWHY: 3–5 bullets. Tie each to who said it, e.g. \"Rex flagged X, so Gemma changed Y\".\nHOW IT WAS CHECKED: what the judges passed or failed, in one or two lines.\n" +
-      (article ? "FOR THE ARTICLE: which search phrase and reader it targets and why, as stated in the transcript (say \"not discussed\" if it wasn't).\n" : "") +
-      "NOT VERIFIED: every claim, study, product detail or number that nobody confirmed against a real source. Write \"Nothing flagged\" only if there truly is none.\nKeep it under 180 words.";
+      (article ? "SEO RATIONALE (say \"not discussed\" for any line the transcript doesn't cover):\n- Target phrase and search intent\n- Data behind the choice: the numbers given (impressions, position, clicks, dates), or \"no data given\"\n- Secondary phrases\n- Why this article or angle over the alternatives\n- Overlap with existing posts and the internal links planned\n" : "") +
+      "NOT VERIFIED: every claim, study, product detail or number that nobody confirmed against a real source. Write \"Nothing flagged\" only if there truly is none.\nKeep it under " + (article ? 260 : 180) + " words.";
   }
 
   function logTurn(cls, title, sub, text){

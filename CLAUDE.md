@@ -43,8 +43,16 @@ A handoff whose `**Playbook:**` line says "Change the app" is a change request f
 The owner wants to know why a decision was made, above all for articles posted on Strand.
 - The app adds a "Why the team decided this" summary to every run and to its handoff. Read it, and check its "NOT VERIFIED" list against real sources before using anything.
 - Every article preview you post (Strand posts, outlines, pins) carries your own **Why this article** section. Keep it short and specific:
-  - the data behind it: GSC queries with impressions and positions, GA traffic or Amazon clicks, with dates
-  - who it's for and the search phrase it targets
+  - **SEO rationale** (the owner asked for this explicitly):
+    - the target phrase and search intent
+    - the GSC data that picked it: queries, impressions, average position, clicks, the date range, and the page currently getting those impressions
+    - secondary phrases
+    - what ranks in the top 5 now (check with Firecrawl) and how this post will be better or different
+    - why this topic now, over other candidates
+    - cannibalization risk with existing Strand posts, and the internal links in and out
+    - the SEO title and meta description, with their lengths
+  - other data: GA traffic or Amazon clicks, with dates
+  - who it's for
   - the evidence used: PubMed links, plus what was marked "not studied" and why
   - what the free team suggested and what you kept, changed or dropped, with the reason
   - open risks or anything still unverified
