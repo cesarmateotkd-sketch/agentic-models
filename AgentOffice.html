@@ -778,7 +778,14 @@ fieldset:disabled .lock{display:block}
       hint: "Paste 1–4 image links (PNG/JPG/WebP on GitHub Pages) and what the pins are for. Claude posts pins for review there.",
       placeholder: "e.g. https://cesarmateotkd-sketch.github.io/agentic-models/review/post56-pin1.png — pin for the silk press post",
       brief: "DELIVERABLE: a pass/fail review of each attached image, one line per check, quoting what fails and how to fix it: 1) headline readable at phone feed size, 2) the main message is clear at a glance, 3) Strand palette, and text on light backgrounds is dark enough to read, 4) 2:3 portrait, 1000×1500, 5) apostrophes look like normal apostrophes, not odd wedges, 6) no cure, miracle or health claims, prices or star ratings, 7) clearly different from the other images. End each image with KEEP or REDO.",
-      crew: [GEMMA("Visual critic", "builder", "Look closely at the actual images. Be specific about what you see.", { vision: true })] }
+      crew: [GEMMA("Visual critic", "builder", "Look closely at the actual images. Be specific about what you see.", { vision: true })] },
+    // turns a rough idea into a change request; Claude builds it on a preview branch and the owner approves before it goes live
+    appchange: { label: "Change the app", rounds: 2, autoSend: true,
+      hint: "Describe what you'd like this app to do differently. The team turns it into a clear request and sends it to Claude, who builds it on a preview branch for your approval.",
+      placeholder: "e.g. Make Pin batch default to 7 pins, and show the pin titles as a numbered list I can copy one by one.",
+      rules: "APP RULES (AI Relay Office): stays a single static HTML file with no backend or build step; API keys stay only in the phone's browser storage; saved settings, keys and history must survive the update; keep the Game Boy Advance pixel look; it must work one-handed on an iPhone home screen.",
+      brief: "DELIVERABLE: a change request for the app, in plain words, no code: GOAL (one sentence on why), WHAT CHANGES (what the owner will see and do differently, step by step), DONE WHEN (3–6 checks someone can tap through on a phone to confirm it works), KEEP (anything that must not change), and QUESTIONS (only if something is genuinely unclear). Keep it as small as the idea allows.",
+      crew: [GEMMA("Spec writer", "builder", "Turn the owner's idea into a short, concrete change request. No code. Return the full request every time."), REX("Spec checker", "judge", CHECK_JUDGE)] }
   };
   Object.keys(PLAYBOOKS).forEach(k => $("playbook").appendChild(el("option", { value: k, textContent: PLAYBOOKS[k].label })));
   $("playbook").appendChild(el("option", { value: "", textContent: "Custom team (⚙ Settings)" }));
@@ -862,7 +869,7 @@ fieldset:disabled .lock{display:block}
     if (controller) return;
     const pbKey = $("playbook").value, pb = PLAYBOOKS[pbKey];
     const crew = pb ? buildCrew(pb) : team.slice();
-    const task = pb ? input + "\n\n" + pb.brief + "\n\n" + BRAND_RULES : input;
+    const task = pb ? input + "\n\n" + pb.brief + "\n\n" + (pb.rules || BRAND_RULES) : input;
     const missing = [...new Set(crew.filter(a => a.provider === "custom" ? !conn.custom.base : !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
     if (missing.length) { openSettings("connPanel"); status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under ⚙ Connections."; return; }
 
@@ -966,7 +973,7 @@ fieldset:disabled .lock{display:block}
         final: { name: draft.name, text: draft.text }, lastJudge: lastJudge ? { name: lastJudge.name, text: lastJudge.text } : null });
       saveRun(run);
       // a job's result goes straight back to Claude; anything else waits for the SEND TO CLAUDE button
-      renderFinal(run, job ? () => { job.status = "sent"; saveJobs(); } : null);
+      renderFinal(run, job ? () => { job.status = "sent"; saveJobs(); } : pb?.autoSend ? () => {} : null);
       if (job) { job.status = job.status === "sent" ? "sent" : "done"; saveJobs(); }
       if (approved) { scene.celebrate(); say("RELAY", null, "Every judge signed off. Quest complete! The final version is at the bottom of the log."); }
       else say("RELAY", null, judges.length ? "Out of rounds. The last draft is in the log as the final." : "Done! The final version is at the bottom of the log.");

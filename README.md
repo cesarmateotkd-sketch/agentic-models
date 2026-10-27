@@ -42,6 +42,7 @@ It opens full screen with its own pixel icon. The site root (`index.html`) redir
 - **Compliance check:** FTC disclosure, Amazon Associates, Pinterest and Meta ad rules, one line per rule.
 - **Visual brief:** 3 pin concepts with a Canva prompt, in the Strand palette.
 - **Pin critique (image):** paste image links and Gemini reviews the actual pins.
+- **Change the app:** describe what you'd like the app to do differently. The team writes a clear change request and sends it to Claude automatically. Claude builds it on a preview branch and replies with how to check it; it only goes live after you approve.
 - **Custom team:** the team you set up under ⚙.
 
 If a playbook's provider has no key, that teammate moves to one you've connected, so one key is enough.
