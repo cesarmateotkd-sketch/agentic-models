@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Relay">
+<meta name="theme-color" content="#3f3b8f">
+<title>AI Relay Office</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a handheld "screen" (240x160 canvas office) with a dialogue box under it, then menu windows for team, connections, task and the log.
+   Deliberately single-theme: a GBA world looks the same on any host. */
+:root{
+  --shell:#3f3b8f; --shell-dark:#2c2a6b; --bezel:#1d1c3b;
+  --win:#f8f8f0; --win-edge:#3a4870; --win-inner:#a8c0e8; --ink:#283040; --muted:#5e6a86;
+  --builder:#f0a030; --judge:#d84890; --helper:#4878e8; --ok:#30a860; --err:#d83838; --gold:#f8c838;
+  --px:"Press Start 2P",ui-monospace,Menlo,monospace;
+  --body:"Pixelify Sans",ui-rounded,system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--shell); color:var(--ink); font:17px/1.45 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:calc(env(safe-area-inset-top,0px) + 16px) calc(env(safe-area-inset-bottom,0px) + 40px);
+  -webkit-text-size-adjust:100%;
+  background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:6px 6px;
+}
+main{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+
+/* handheld screen */
+.bezel{background:var(--bezel);border-radius:14px 14px 40px 14px;padding:14px 14px 10px;box-shadow:0 6px 0 var(--shell-dark)}
+.bezel-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.led{width:8px;height:8px;border-radius:50%;background:#555;box-shadow:0 0 0 2px #111 inset}
+.led.on{background:#f84858;box-shadow:0 0 8px #f84858}
+.brand{font:10px var(--px);color:#b8b4e8;letter-spacing:.08em}
+.brand b{color:var(--gold);font-weight:400}
+canvas#office{display:block;width:100%;aspect-ratio:3/2;max-width:100%;image-rendering:pixelated;image-rendering:crisp-edges;background:#9cc4e4;border-radius:4px;cursor:pointer;touch-action:manipulation}
+
+/* GBA window */
+.win{background:var(--win);border:3px solid var(--win-edge);border-radius:8px;box-shadow:inset 0 0 0 2px var(--win-inner),0 4px 0 var(--shell-dark);padding:14px}
+.win h2,.win summary{font:11px/1.4 var(--px);margin:0;color:var(--ink)}
+details.win>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px}
+details.win>summary::-webkit-details-marker{display:none}
+details.win>summary::after{content:"▶";color:var(--muted)}
+details.win[open]>summary::after{content:"▼"}
+.hint{font:9px var(--px);color:var(--muted)}
+
+/* dialogue box */
+.textbox{position:relative;min-height:118px}
+.tb-name{position:absolute;top:-14px;left:12px;background:var(--win);border:3px solid var(--win-edge);border-radius:6px;padding:4px 8px;font:10px var(--px);color:var(--c,var(--ink))}
+.tb-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:13.5em;overflow-y:auto;padding-top:6px;font-size:17px}
+.tb-arrow{position:absolute;right:12px;bottom:8px;font:10px var(--px);color:var(--err)}
+@media (prefers-reduced-motion:no-preference){.tb-arrow{animation:bob .8s steps(2) infinite}}
+@keyframes bob{50%{transform:translateY(3px)}}
+
+.stack{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+label{display:flex;flex-direction:column;gap:6px;font:9px/1.5 var(--px);color:var(--ink)}
+label small,.small{font:14px/1.35 var(--body);color:var(--muted)}
+input,textarea,select{
+  font:17px var(--body);color:var(--ink);background:#fff;
+  border:2px solid var(--win-edge);border-radius:4px;padding:9px 10px;width:100%;min-width:0;
+}
+.mono{font-family:ui-monospace,Menlo,monospace!important;font-size:14px!important}
+textarea{min-height:96px;resize:vertical}
+input:focus,textarea:focus,select:focus,button:focus-visible,a:focus-visible,canvas:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.row>*{flex:1 1 120px;min-width:0}
+button{font:10px/1.2 var(--px);border:2px solid var(--win-edge);border-radius:6px;padding:11px 12px;cursor:pointer;color:var(--ink);background:#fff;box-shadow:0 3px 0 var(--win-edge)}
+button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--win-edge)}
+button:disabled{opacity:.4;cursor:default;transform:none}
+.tiny{padding:7px 8px;font-size:9px;flex:0 0 auto}
+a{color:var(--helper)}
+
+/* A / B buttons */
+.controls{display:flex;gap:14px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.round-btn{width:64px;height:64px;border-radius:50%;padding:0;font:13px var(--px);color:#fff;border:3px solid #6a1838;background:#d83860;box-shadow:0 4px 0 #6a1838;display:grid;place-items:center}
+.round-btn.b{background:#7a78c8;border-color:#2c2a6b;box-shadow:0 4px 0 #2c2a6b}
+.btn-label{font:8px var(--px);color:var(--muted);text-align:center;margin-top:6px}
+.status{font:9px/1.6 var(--px);color:var(--muted);min-height:1.6em}
+.status.err{color:var(--err)}.status.ok{color:var(--ok)}
+
+/* connections */
+.conn{border-top:2px dashed var(--win-inner);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.conn:first-child{border-top:0;padding-top:0}
+.conn-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.conn-head b{font:10px var(--px)}
+.chip{font:8px var(--px);padding:4px 6px;border-radius:4px;border:2px solid var(--muted);color:var(--muted);white-space:nowrap}
+.chip.ok{color:var(--ok);border-color:currentColor}.chip.err{color:var(--err);border-color:currentColor}
+.keyrow{display:flex;gap:6px}.keyrow input{flex:1}
+
+/* team cards */
+.agent{border:2px solid var(--win-edge);border-left:8px solid var(--c);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:10px;background:#fff}
+.agent.builder{--c:var(--builder)}.agent.judge{--c:var(--judge)}.agent.helper{--c:var(--helper)}
+.agent-top{display:flex;gap:8px;align-items:center}
+.agent-top canvas{width:36px;height:45px;image-rendering:pixelated;flex:0 0 auto}
+.agent-top .names{flex:1;display:flex;gap:6px;min-width:0;flex-wrap:wrap}
+.agent-top .names input{flex:1 1 100px}
+.agent textarea{min-height:64px;font-size:15px}
+.check{flex-direction:row;align-items:center;gap:8px}
+.check input{width:auto}
+.legend{display:flex;gap:6px;flex-wrap:wrap}
+.lane{font:8px var(--px);padding:4px 6px;border-radius:4px;color:#fff}
+.lane.builder{background:var(--builder)}.lane.judge{background:var(--judge)}.lane.helper{background:var(--helper)}
+
+/* log */
+#track{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.turn{border:2px solid var(--win-edge);border-left:8px solid var(--c);border-radius:6px;padding:10px 12px;background:#fff;min-width:0}
+.turn.builder{--c:var(--builder)}.turn.judge{--c:var(--judge)}.turn.helper{--c:var(--helper)}.turn.final{--c:var(--ok)}.turn.error{--c:var(--err)}
+.turn h3{margin:0 0 6px;font:9px/1.5 var(--px);color:var(--ink);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.turn h3 span{font:13px var(--body);color:var(--muted);overflow-wrap:anywhere}
+.turn pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--body)}
+.turn .copy{margin-top:10px}
+.empty{color:var(--muted);font-size:15px;text-align:center;padding:8px}
+</style>
+</head>
+<body>
+<main>
+  <section class="bezel" aria-label="Office view">
+    <div class="bezel-top"><span class="led" id="led"></span><span class="brand">AI RELAY <b>OFFICE</b></span></div>
+    <canvas id="office" width="240" height="160" tabindex="0" aria-label="Pixel office where your AI agents walk to the whiteboard to take their turn. Tap a teammate to read what they last said."></canvas>
+  </section>
+
+  <section class="win textbox" aria-live="polite">
+    <div class="tb-name" id="tbName">RELAY</div>
+    <div class="tb-text" id="tbText">Welcome to the office! Add your free keys under Connections, check your team, type a task, then press START. Tap any teammate to hear what they last said.</div>
+    <div class="tb-arrow" aria-hidden="true">▼</div>
+  </section>
+
+  <form class="win" id="taskForm">
+    <h2>Task</h2>
+    <div class="stack">
+      <textarea id="task" aria-label="Task" placeholder="e.g. Write 3 TikTok hook ideas for an anime edit account, under 12 words each"></textarea>
+      <div class="row" style="align-items:center">
+        <label style="flex:0 1 130px">Max rounds
+          <select id="rounds"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+        </label>
+        <div class="controls">
+          <div><button type="button" class="round-btn b" id="stop" disabled aria-label="Stop">B</button><div class="btn-label">STOP</div></div>
+          <div><button type="submit" class="round-btn" id="run" aria-label="Start">A</button><div class="btn-label">START</div></div>
+        </div>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </form>
+
+  <details class="win" id="teamPanel">
+    <summary>Team <span class="hint" id="teamCount"></span></summary>
+    <div class="stack">
+      <div class="legend"><span class="lane helper">HELPER adds input</span><span class="lane builder">BUILDER writes</span><span class="lane judge">JUDGE approves</span></div>
+      <div class="stack" id="agents" style="margin-top:0"></div>
+      <label>Hire a teammate <small>Each one is the best free model we found for that job.</small>
+        <select id="preset"></select>
+      </label>
+      <div class="row">
+        <button type="button" id="addAgent">Hire</button>
+        <button type="button" id="resetTeam">Reset team</button>
+      </div>
+    </div>
+  </details>
+
+  <details class="win" id="connPanel">
+    <summary>Connections <span class="hint" id="connCount"></span></summary>
+    <div class="stack" id="conns"></div>
+  </details>
+
+  <section class="win">
+    <h2>Log</h2>
+    <div id="track"><div class="empty">Every turn gets written down here.</div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+  const store = {
+    get(k, d){ try { const v = localStorage.getItem("relay2." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v){ try { localStorage.setItem("relay2." + k, JSON.stringify(v)); } catch {} }
+  };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ================= providers ================= */
+  const PROVIDERS = {
+    openrouter: { name: "OpenRouter", base: "https://openrouter.ai/api/v1", kind: "openai", keyUrl: "https://openrouter.ai/settings/keys",
+      note: "Biggest free lineup, including Nemotron 3 Ultra and Inkling. About 50 free requests a day, so give it first-round-only teammates.", def: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+    groq: { name: "Groq", base: "https://api.groq.com/openai/v1", kind: "openai", keyUrl: "https://console.groq.com/keys",
+      note: "Fastest provider. OpenAI's open GPT-OSS 120B with generous free daily limits.", def: "openai/gpt-oss-120b" },
+    gemini: { name: "Google Gemini", base: "https://generativelanguage.googleapis.com/v1beta", kind: "gemini", keyUrl: "https://aistudio.google.com/apikey",
+      note: "Gemini 3.8 Flash and 2.5 Pro on the AI Studio free tier.", def: "gemini-3.8-flash" },
+    mistral: { name: "Mistral", base: "https://api.mistral.ai/v1", kind: "openai", keyUrl: "https://console.mistral.ai/api-keys",
+      note: "Pick the free Experiment plan when you sign up. Free-plan prompts may be used for training.", def: "mistral-medium-latest" },
+    custom: { name: "Custom", base: "", kind: "openai", keyUrl: "",
+      note: "Any service with an OpenAI-style /chat/completions endpoint. Enter its base URL.", def: "" }
+  };
+  const conn = store.get("conn", {});
+  for (const p in conn) if (!PROVIDERS[p]) delete conn[p];
+  for (const p in PROVIDERS) conn[p] = Object.assign({ key: "", base: PROVIDERS[p].base, ok: null }, conn[p]);
+  const modelLists = {};
+  const saveConn = () => { store.set("conn", conn); const n = Object.values(conn).filter(c => c.key).length; $("connCount").textContent = n ? n + " ON" : "ADD KEY"; };
+
+  async function fetchModels(pid){
+    const P = PROVIDERS[pid], c = conn[pid];
+    const base = (c.base || P.base).replace(/\/+$/, "");
+    let url, opts = { headers: {} }, pick;
+    if (P.kind === "gemini") {
+      url = base + "/models?pageSize=1000&key=" + encodeURIComponent(c.key);
+      pick = j => (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes("generateContent")).map(m => m.name.replace(/^models\//, ""));
+    } else {
+      url = base + "/models";
+      if (c.key) opts.headers.Authorization = "Bearer " + c.key;
+      pick = j => (Array.isArray(j) ? j : (j.data || j.models || [])).map(m => m.id || m.name).filter(Boolean);
+    }
+    const r = await fetch(url, opts);
+    let j = null; try { j = await r.json(); } catch {}
+    if (!r.ok) throw new Error((j && (j.error?.message || j.message)) || "HTTP " + r.status);
+    const ids = pick(j).sort();
+    modelLists[pid] = ids;
+    let dl = $("models-" + pid);
+    if (!dl) { dl = el("datalist", { id: "models-" + pid }); document.body.appendChild(dl); }
+    dl.textContent = ""; ids.forEach(id => dl.appendChild(el("option", { value: id })));
+    return ids;
+  }
+  const isNetErr = e => e && (e.message === "Load failed" || e.message === "Failed to fetch" || e.name === "TypeError");
+
+  function renderConns(){
+    const box = $("conns"); box.textContent = "";
+    for (const pid in PROVIDERS) {
+      const P = PROVIDERS[pid], c = conn[pid];
+      const chip = el("span", { className: "chip" + (c.ok === true ? " ok" : c.ok === false ? " err" : ""), textContent: c.ok === true ? "WORKING" : c.ok === false ? "FAILED" : c.key ? "UNTESTED" : "NO KEY" });
+      const key = el("input", { type: "password", className: "mono", value: c.key, placeholder: "Paste key", autocomplete: "off", autocapitalize: "off", spellcheck: false, id: "key-" + pid });
+      key.setAttribute("aria-label", P.name + " API key");
+      key.addEventListener("change", () => { c.key = key.value.trim(); c.ok = null; saveConn(); renderConns(); renderTeam(); });
+      const show = el("button", { type: "button", className: "tiny", textContent: "SHOW" });
+      show.onclick = () => { const h = key.type === "text"; key.type = h ? "password" : "text"; show.textContent = h ? "SHOW" : "HIDE"; };
+      const status = el("div", { className: "status", id: "cstat-" + pid });
+      const test = el("button", { type: "button", className: "tiny", textContent: "TEST" });
+      test.onclick = async () => {
+        c.key = key.value.trim(); status.className = "status"; status.textContent = "TESTING…";
+        try { const ids = await fetchModels(pid); c.ok = true; saveConn(); renderConns(); flash(pid, "Connected. " + ids.length + " models.", "ok"); }
+        catch (e) { c.ok = false; saveConn(); renderConns(); flash(pid, isNetErr(e) ? "Couldn't connect. You're offline or this provider blocks browser apps." : e.message, "err"); }
+      };
+      const kids = [el("div", { className: "conn-head" }, el("b", { textContent: P.name }), chip), el("div", { className: "small", textContent: P.note })];
+      if (pid === "custom") {
+        const base = el("input", { className: "mono", value: c.base, placeholder: "https://example.com/v1", autocapitalize: "off", spellcheck: false, id: "base-custom" });
+        base.setAttribute("aria-label", "Custom base URL");
+        base.addEventListener("change", () => { c.base = base.value.trim(); c.ok = null; saveConn(); });
+        kids.push(base);
+      }
+      kids.push(el("div", { className: "keyrow" }, key, show, test));
+      if (P.keyUrl) kids.push(el("a", { href: P.keyUrl, target: "_blank", rel: "noopener", className: "small", textContent: "Get a free key ↗" }));
+      kids.push(status);
+      box.appendChild(el("div", { className: "conn" }, ...kids));
+    }
+  }
+  const flash = (pid, msg, cls) => { const s = $("cstat-" + pid); if (s) { s.className = "status " + cls; s.textContent = msg; } };
+
+  /* ================= team ================= */
+  const ROLE_PROMPTS = {
+    helper: "Give focused input that helps the team produce a great result. Be concise.",
+    builder: "Produce the actual deliverable. When there is feedback, revise and return the full deliverable, not just the changes.",
+    judge: "Review the latest deliverable against the task. If it is genuinely ready, reply with APPROVED on the first line. Otherwise list specific, actionable problems."
+  };
+  const PRESETS = [
+    { label: "Nova · Planner (Nemotron 3 Ultra)", name: "Nova", title: "Planner", role: "helper", provider: "openrouter", model: "nvidia/nemotron-3-ultra-550b-a55b:free", every: false, hair: 0,
+      prompt: "Break the task into a short concrete plan: goal, audience, constraints, numbered steps. Plan only; don't write the deliverable." },
+    { label: "Gemma · Writer (Gemini 3.8 Flash)", name: "Gemma", title: "Writer", role: "builder", provider: "gemini", model: "gemini-3.8-flash", every: true, hair: 1,
+      prompt: ROLE_PROMPTS.builder + " Write for a real audience: specific, vivid, no filler." },
+    { label: "Rex · Critic (GPT-OSS 120B)", name: "Rex", title: "Critic", role: "judge", provider: "groq", model: "openai/gpt-oss-120b", every: true, hair: 3,
+      prompt: "Be a strict reviewer. Check the latest draft against every requirement in the task and plan. If it is genuinely ready, reply with APPROVED on the first line. Otherwise list specific, actionable problems, most important first." },
+    { label: "Mira · Second opinion (Mistral Medium 3.5)", name: "Mira", title: "Second opinion", role: "judge", provider: "mistral", model: "mistral-medium-latest", every: true, hair: 2,
+      prompt: "Review the latest draft from the target audience's point of view: is it clear, persuasive and on-brand? If it is genuinely ready, reply with APPROVED on the first line. Otherwise list what would make it land better." },
+    { label: "Inky · Idea generator (Inkling)", name: "Inky", title: "Ideas", role: "helper", provider: "openrouter", model: "thinkingmachines/inkling:free", every: false, hair: 4,
+      prompt: "Before anyone writes, brainstorm 5 genuinely different angles or approaches for this task, one line each. Flag the strongest." },
+    { label: "Doc · Fact checker (Gemini 2.5 Pro)", name: "Doc", title: "Fact checker", role: "helper", provider: "gemini", model: "gemini-2.5-pro", every: true, hair: 5,
+      prompt: "Point out any claims in the latest draft that are likely wrong, outdated or unsupported, and say what to change. If there are none, say so in one line." },
+    { label: "Byte · Coder (Laguna S 2.1)", name: "Byte", title: "Coder", role: "builder", provider: "openrouter", model: "poolside/laguna-s-2.1:free", every: true, hair: 6,
+      prompt: "Write complete, working code for the task. When there is feedback, return the full revised code." },
+    { label: "New hire (blank)", name: "", title: "Helper", role: "helper", provider: "", model: "", every: true, hair: 7, prompt: ROLE_PROMPTS.helper }
+  ];
+  const fromPreset = (p, n) => {
+    const pid = p.provider || Object.keys(PROVIDERS).find(k => conn[k].key) || "openrouter";
+    return { name: p.name || "Temp " + n, title: p.title, role: p.role, provider: pid, model: p.model || PROVIDERS[pid].def, every: p.every, prompt: p.prompt, hair: (p.hair + n) % HAIRS.length };
+  };
+  const HAIRS = ["#5a3a22", "#f8d048", "#e05838", "#283040", "#a868d8", "#e8e8e8", "#3898f8", "#e888b8"];
+  const ROLE_SHIRT = { builder: "#f0a030", judge: "#d84890", helper: "#4878e8" };
+  const DEFAULT_TEAM = () => [0, 1, 2].map(i => Object.assign(fromPreset(PRESETS[i], 0), { hair: PRESETS[i].hair }));
+  let team = store.get("team4", null) || DEFAULT_TEAM();
+  team.forEach((a, i) => { if (a.hair == null) a.hair = i % HAIRS.length; if (!a.title) a.title = a.role; });
+  const saveTeam = () => { store.set("team4", team); $("teamCount").textContent = team.length + " ON STAFF"; scene.sync(team); };
+  PRESETS.forEach((p, i) => $("preset").appendChild(el("option", { value: i, textContent: p.label })));
+
+  function renderTeam(){
+    const box = $("agents"); box.textContent = "";
+    team.forEach((a, i) => {
+      const card = el("div", { className: "agent " + a.role });
+      const face = el("canvas", { width: 12, height: 15 });
+      face.getContext("2d").drawImage(sprite(palFor(a), "idle"), 0, 0);
+      face.setAttribute("aria-hidden", "true");
+      const name = el("input", { value: a.name, id: "an-" + i }); name.setAttribute("aria-label", "Name");
+      name.addEventListener("change", () => { a.name = name.value.trim() || "Temp " + (i + 1); saveTeam(); });
+      const title = el("input", { value: a.title, id: "at-" + i }); title.setAttribute("aria-label", "Job title");
+      title.addEventListener("change", () => { a.title = title.value.trim(); saveTeam(); });
+      const up = el("button", { type: "button", className: "tiny", textContent: "↑", disabled: i === 0 }); up.setAttribute("aria-label", "Move up");
+      const down = el("button", { type: "button", className: "tiny", textContent: "↓", disabled: i === team.length - 1 }); down.setAttribute("aria-label", "Move down");
+      const del = el("button", { type: "button", className: "tiny", textContent: "✕", disabled: team.length === 1 }); del.setAttribute("aria-label", "Remove " + a.name);
+      up.onclick = () => { [team[i - 1], team[i]] = [team[i], team[i - 1]]; saveTeam(); renderTeam(); };
+      down.onclick = () => { [team[i + 1], team[i]] = [team[i], team[i + 1]]; saveTeam(); renderTeam(); };
+      del.onclick = () => { team.splice(i, 1); saveTeam(); renderTeam(); };
+
+      const role = el("select", { id: "ar-" + i });
+      [["helper","Helper"],["builder","Builder"],["judge","Judge"]].forEach(([v,t]) => role.appendChild(el("option", { value: v, textContent: t, selected: a.role === v })));
+      role.addEventListener("change", () => { if (a.prompt === ROLE_PROMPTS[a.role]) a.prompt = ROLE_PROMPTS[role.value]; a.role = role.value; saveTeam(); renderTeam(); });
+      const prov = el("select", { id: "ap-" + i });
+      for (const pid in PROVIDERS) prov.appendChild(el("option", { value: pid, textContent: PROVIDERS[pid].name + (conn[pid].key ? "" : " (no key)"), selected: a.provider === pid }));
+      prov.addEventListener("change", () => { a.provider = prov.value; a.model = PROVIDERS[prov.value].def; saveTeam(); renderTeam(); });
+      const model = el("input", { className: "mono", value: a.model, id: "am-" + i, autocapitalize: "off", spellcheck: false, placeholder: "model name" });
+      model.setAttribute("list", "models-" + a.provider);
+      model.addEventListener("change", () => { a.model = model.value.trim(); saveTeam(); });
+      model.addEventListener("focus", () => { if (!modelLists[a.provider] && conn[a.provider].key) fetchModels(a.provider).catch(() => {}); }, { once: true });
+      const every = el("input", { type: "checkbox", checked: a.every, id: "ae-" + i });
+      every.addEventListener("change", () => { a.every = every.checked; saveTeam(); });
+      const prompt = el("textarea", { value: a.prompt, id: "ai-" + i });
+      prompt.addEventListener("change", () => { a.prompt = prompt.value; saveTeam(); });
+
+      card.append(
+        el("div", { className: "agent-top" }, face, el("div", { className: "names" }, name, title), up, down, del),
+        el("div", { className: "row" }, el("label", {}, "Role", role), el("label", {}, "Provider", prov)),
+        el("label", {}, "Model", model),
+        el("label", {}, "Instructions", prompt),
+        el("label", { className: "check" }, every, "Speaks every round")
+      );
+      box.appendChild(card);
+    });
+  }
+  $("addAgent").onclick = () => { team.push(fromPreset(PRESETS[+$("preset").value], team.length)); saveTeam(); renderTeam(); say("RELAY", null, team[team.length - 1].name + " joined the team!"); };
+  $("resetTeam").onclick = () => { team = DEFAULT_TEAM(); saveTeam(); renderTeam(); };
+
+  /* ================= pixel art ================= */
+  const BODY = [
+    "...OOOOOO...",
+    "..OHHHHHHO..",
+    ".OHHHHHHHHO.",
+    ".OHSSSSSSHO.",
+    ".OSESSSSESO.",
+    ".OSSSSSSSSO.",
+    "..OSSSSSSO..",
+    "...OOSSOO...",
+    "..OCCCCCCO..",
+    ".OCCCDDCCCO.",
+    ".OSOCCCCOSO.",
+    "..OCCCCCCO..",
+    "..OPPPPPPO..",
+    "..OPPOOPPO.."
+  ];
+  const FEET = { idle: "..OBBO.OBBO.", walkA: ".OBBO..OBBO.", walkB: "..OBBO..OBBO" };
+  const shade = (hex, f) => "#" + [1, 3, 5].map(i => Math.max(0, Math.min(255, Math.round(parseInt(hex.substr(i, 2), 16) * f))).toString(16).padStart(2, "0")).join("");
+  const palFor = a => ({ hair: HAIRS[a.hair % HAIRS.length], shirt: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper });
+  const spriteCache = {};
+  function sprite(pal, frame){
+    const k = pal.hair + pal.shirt + frame;
+    if (spriteCache[k]) return spriteCache[k];
+    const c = document.createElement("canvas"); c.width = 12; c.height = 15;
+    const x = c.getContext("2d");
+    const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: shade(pal.shirt, .7), P: "#485878", B: "#283040" };
+    [...BODY, FEET[frame]].forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
+    return spriteCache[k] = c;
+  }
+
+  /* ================= office scene ================= */
+  const scene = (() => {
+    const cv = $("office"), ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const BOARD = { x: 120, y: 44 };
+    const ROW_A = 80, ROW_B = 124;
+    const DESKS = [[92, ROW_A], [148, ROW_A], [36, ROW_A], [204, ROW_A], [92, ROW_B], [148, ROW_B], [36, ROW_B], [204, ROW_B]];
+    const LOUNGE = [20, 44, 68, 172, 196, 220];
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let npcs = [], round = 0, marks = [], confetti = [], t = 0, last = performance.now();
+
+    function slot(i){
+      if (i < DESKS.length) { const [dx, dt] = DESKS[i]; return { desk: true, dx, dtop: dt, x: dx - 3, y: dt + 2, corridor: dt === ROW_A ? 62 : 108 }; }
+      const j = (i - DESKS.length) % LOUNGE.length;
+      return { desk: false, x: LOUNGE[j] + Math.floor((i - DESKS.length) / LOUNGE.length) * 4, y: 152, corridor: 152 };
+    }
+    function sync(list){
+      npcs = list.map((a, i) => {
+        const s = slot(i), old = npcs[i];
+        const n = old && old.home.x === s.x && old.home.y === s.y && !old.path.length ? old : { x: s.x, y: s.y, path: [], resolve: null, bubble: null, away: false };
+        return Object.assign(n, { agent: a, idx: i, home: s, pal: palFor(a) });
+      });
+    }
+    function walk(n, pts){
+      return new Promise(res => {
+        if (reduce) { const p = pts[pts.length - 1]; n.x = p.x; n.y = p.y; n.path = []; return res(); }
+        n.path = pts.slice(); n.resolve = res;
+      });
+    }
+    function toBoard(n){
+      n.away = true; const s = n.home;
+      return walk(n, [{ x: s.x, y: s.corridor }, { x: BOARD.x, y: s.corridor }, { x: BOARD.x, y: BOARD.y }]);
+    }
+    function toDesk(n){
+      const s = n.home;
+      return walk(n, [{ x: BOARD.x, y: s.corridor }, { x: s.x, y: s.corridor }, { x: s.x, y: s.y }]).then(() => { n.away = false; });
+    }
+    function allHome(){ npcs.forEach(n => { n.bubble = null; if (n.away || n.path.length) { n.path = []; n.x = n.home.x; n.y = n.home.y; n.away = false; n.resolve?.(); n.resolve = null; } }); }
+    function celebrate(){
+      npcs.forEach(n => n.bubble = "star");
+      if (reduce) return;
+      for (let i = 0; i < 70; i++) confetti.push({ x: 120, y: 30, vx: (Math.random() - .5) * 140, vy: -Math.random() * 90 - 20, c: ["#f8c838", "#d84890", "#4878e8", "#30a860", "#f0a030"][i % 5], life: 2.2 });
+      setTimeout(() => npcs.forEach(n => { if (n.bubble === "star") n.bubble = null; }), 3500);
+    }
+
+    /* drawing helpers */
+    const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+    function room(){
+      for (let y = 28; y < 160; y += 8) for (let x = 0; x < 240; x += 8) R(x, y, 8, 8, ((x + y) / 8) % 2 ? "#e4d0a4" : "#dcc494");
+      for (let y = 28; y < 160; y += 16) R(0, y, 240, 1, "#ccb07e");
+      R(0, 0, 240, 26, "#9cc4e4"); R(0, 0, 240, 3, "#7aa4cc"); R(0, 24, 240, 4, "#58789c");
+      [[10, 46], [184, 46]].forEach(([wx, ww]) => {
+        R(wx - 2, 4, ww + 4, 17, "#283040"); R(wx, 5, ww, 15, "#c8ecff"); R(wx, 15, ww, 5, "#a8dcf8");
+        const cx = wx + ((t * 4 + wx) % (ww + 10)) - 8;
+        ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip(); R(cx, 8, 8, 3, "#fff"); R(cx + 2, 6, 5, 2, "#fff"); ctx.restore();
+        R(wx + ww / 2 - 1, 5, 2, 15, "#f8f8f8"); R(wx, 12, ww, 1, "#f8f8f8");
+      });
+      R(90, 3, 60, 22, "#283040"); R(91, 4, 58, 20, "#6878a0"); R(92, 5, 56, 18, "#fafaf4");
+      ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#283040";
+      ctx.fillText(round ? "R" + round : "TO DO", 95, 7);
+      marks.slice(-14).forEach((c, i) => R(95 + (i % 7) * 7, 16 + Math.floor(i / 7) * 3, 5, 2, c));
+      R(162, 5, 12, 12, "#283040"); R(163, 6, 10, 10, "#fff"); R(167, 7, 1, 4, "#283040");
+      const a = t * .5; R(167 + Math.round(Math.cos(a) * 3), 10 + Math.round(Math.sin(a) * 3), 1, 1, "#d83838");
+      R(100, 32, 40, 18, "#b84848"); R(102, 34, 36, 14, "#d86060"); R(104, 36, 32, 10, "#e88080");
+      plant(6, 30); plant(226, 30); plant(4, 140); plant(228, 140);
+      R(62, 14, 10, 20, "#283040"); R(63, 15, 8, 8, "#88c8f0"); R(63, 23, 8, 10, "#e8e8e8"); R(64, 16, 2, 4, "#c8ecff");
+    }
+    function plant(x, y){ R(x, y + 8, 8, 7, "#283040"); R(x + 1, y + 9, 6, 5, "#b85c38"); R(x, y, 8, 9, "#2e8a40"); R(x + 2, y - 3, 4, 5, "#48b058"); R(x + 1, y + 2, 2, 2, "#68d070"); }
+    function desk(s, busy){
+      const x = s.dx - 14, y = s.dtop;
+      R(x - 1, y - 1, 30, 14, "#283040"); R(x, y, 28, 4, "#d0945c"); R(x, y + 4, 28, 8, "#9c6438"); R(x + 2, y + 6, 24, 1, "#84522c");
+      R(s.dx + 3, y - 9, 11, 9, "#283040"); R(s.dx + 4, y - 8, 9, 6, busy ? (Math.floor(t * 3) % 2 ? "#78e0ff" : "#58c8f8") : "#3a5878"); R(s.dx + 7, y - 2, 3, 2, "#283040");
+    }
+    function bubble(x, y, type){
+      const bx = x - 7, by = y - 27;
+      R(bx - 1, by - 1, 16, 12, "#283040"); R(bx, by, 14, 10, "#fff"); R(x - 1, by + 10, 3, 2, "#283040"); R(x, by + 10, 1, 1, "#fff");
+      if (type === "dots") { const n = Math.floor(t * 3) % 4; for (let i = 0; i < n; i++) R(bx + 3 + i * 3, by + 6, 2, 2, "#283040"); }
+      else if (type === "bang") { R(x - 1, by + 2, 2, 4, "#d83838"); R(x - 1, by + 7, 2, 1, "#d83838"); }
+      else if (type === "check") { [[0,4],[1,5],[2,6],[3,5],[4,4],[5,3],[6,2]].forEach(([dx, dy]) => R(bx + 4 + dx, by + 1 + dy, 1, 2, "#30a860")); }
+      else if (type === "cross") { for (let i = 0; i < 6; i++) { R(bx + 4 + i, by + 2 + i, 1, 1, "#d83838"); R(bx + 9 - i, by + 2 + i, 1, 1, "#d83838"); } }
+      else if (type === "star") { R(x - 1, by + 1, 2, 8, "#f8c838"); R(bx + 3, by + 4, 8, 2, "#f8c838"); R(x - 2, by + 3, 4, 4, "#f8c838"); }
+    }
+    function drawNpc(n){
+      const moving = n.path.length > 0;
+      const frame = moving ? (Math.floor(t * 8) % 2 ? "walkA" : "walkB") : "idle";
+      const bob = moving ? (Math.floor(t * 8) % 2) : (!n.away && !reduce && Math.sin(t * 3 + n.idx * 1.7) > .7 ? 1 : 0);
+      const x = Math.round(n.x), y = Math.round(n.y);
+      if (n.away) R(x - 4, y - 1, 8, 2, "rgba(40,48,64,.25)");
+      ctx.drawImage(sprite(n.pal, frame), x - 6, y - 15 + bob);
+      if (n.bubble) bubble(x, y + bob, n.bubble);
+    }
+
+    function step(now){
+      const dt = Math.min(.05, (now - last) / 1000); last = now; t += dt;
+      for (const n of npcs) {
+        if (!n.path.length) continue;
+        const p = n.path[0], dx = p.x - n.x, dy = p.y - n.y, d = Math.hypot(dx, dy), v = 70 * dt;
+        if (d <= v) { n.x = p.x; n.y = p.y; n.path.shift(); if (!n.path.length && n.resolve) { const r = n.resolve; n.resolve = null; r(); } }
+        else { n.x += dx / d * v; n.y += dy / d * v; }
+      }
+      confetti = confetti.filter(c => (c.life -= dt) > 0);
+      confetti.forEach(c => { c.vy += 120 * dt; c.x += c.vx * dt; c.y += c.vy * dt; });
+
+      room();
+      npcs.forEach(n => { if (n.home.desk) { if (!n.away) drawNpc(n); desk(n.home, !n.away); } });
+      npcs.forEach(n => { if (!n.home.desk && !n.away) drawNpc(n); });
+      npcs.filter(n => n.away).sort((a, b) => a.y - b.y).forEach(drawNpc);
+      confetti.forEach(c => R(Math.round(c.x), Math.round(c.y), 2, 2, c.c));
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+
+    cv.addEventListener("click", e => {
+      const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * 240 / r.width, py = (e.clientY - r.top) * 160 / r.height;
+      const hit = npcs.slice().reverse().find(n => Math.abs(n.x - px) <= 7 && py >= n.y - 17 && py <= n.y + 1);
+      if (hit) onTap(hit.agent, hit.idx);
+    });
+    return { sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
+  })();
+
+  /* ================= dialogue box ================= */
+  let typer = null, typedFull = "";
+  function say(name, role, text){
+    $("tbName").textContent = name.toUpperCase();
+    $("tbName").style.setProperty("--c", role ? `var(--${role})` : "var(--ink)");
+    const box = $("tbText"); clearInterval(typer); typedFull = text; box.scrollTop = 0;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { box.textContent = text; return; }
+    let i = 0; const stepN = Math.max(2, Math.ceil(text.length / 90));
+    box.textContent = "";
+    typer = setInterval(() => { i += stepN; box.textContent = text.slice(0, i); if (i >= text.length) clearInterval(typer); }, 22);
+  }
+  document.querySelector(".textbox").addEventListener("click", () => { clearInterval(typer); $("tbText").textContent = typedFull || $("tbText").textContent; });
+  const lastSaid = new Map();
+  function onTap(a, i){
+    const said = lastSaid.get(i);
+    say(a.name, a.role, said || `I'm ${a.name}, the ${a.title || a.role}. I run on ${PROVIDERS[a.provider]?.name || "?"} (${a.model}).`);
+  }
+
+  /* ================= calling models ================= */
+  async function callAgent(a, userMsg, signal){
+    const P = PROVIDERS[a.provider], c = conn[a.provider];
+    if (!c.key && a.provider !== "custom") throw new Error("No " + P.name + " key. Add it under Connections.");
+    const base = (c.base || P.base).replace(/\/+$/, "");
+    const system = "You are " + a.name + ", the " + (a.title || a.role) + " (" + a.role + ") on a team of AI agents from different companies working on one task. " + a.prompt;
+    let r, j = null;
+    if (P.kind === "gemini") {
+      r = await fetch(base + "/models/" + encodeURIComponent(a.model) + ":generateContent?key=" + encodeURIComponent(c.key), {
+        method: "POST", signal, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: userMsg }] }] })
+      });
+      try { j = await r.json(); } catch {}
+      if (!r.ok) throw httpErr(a, r.status, j?.error?.message);
+      const text = (j?.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+      if (!text) throw new Error(a.name + " returned an empty reply (it may have been blocked by safety filters).");
+      return text;
+    }
+    const headers = { "Content-Type": "application/json" };
+    if (c.key) headers.Authorization = "Bearer " + c.key;
+    if (a.provider === "openrouter") headers["X-Title"] = "AI Relay";
+    r = await fetch(base + "/chat/completions", {
+      method: "POST", signal, headers,
+      body: JSON.stringify({ model: a.model, messages: [{ role: "system", content: system }, { role: "user", content: userMsg }] })
+    });
+    try { j = await r.json(); } catch {}
+    if (!r.ok) throw httpErr(a, r.status, j?.error?.message || j?.message);
+    const text = j?.choices?.[0]?.message?.content;
+    if (!text) throw new Error(a.name + " returned an empty reply.");
+    return String(text).trim();
+  }
+  function httpErr(a, status, msg){
+    const hint = status === 401 || status === 403 ? " Check that key under Connections."
+      : status === 429 ? " Rate limit hit. Wait a bit or move this teammate to another provider."
+      : status === 402 ? " This model needs credit. Pick a free one."
+      : status === 400 || status === 404 ? " The model name may be wrong. Tap the Model field to pick from the list." : "";
+    return new Error(a.name + " (" + PROVIDERS[a.provider].name + " · " + a.model + "): " + (msg || "HTTP " + status) + hint);
+  }
+
+  /* ================= relay ================= */
+  const CLIP = 6000;
+  const clip = t => t.length > CLIP ? t.slice(0, CLIP) + "\n[…trimmed]" : t;
+  function buildPrompt(a, task, turns, round){
+    const lastDraftIdx = turns.map(t => t.role).lastIndexOf("builder");
+    const early = turns.filter((t, i) => t.round === 1 && t.role === "helper" && i < (lastDraftIdx < 0 ? turns.length : lastDraftIdx));
+    const recent = lastDraftIdx < 0 ? turns.filter(t => !early.includes(t)) : turns.slice(lastDraftIdx);
+    const ctx = [...early, ...recent].map(t => "### " + t.name + " (" + t.role + ", round " + t.round + ")\n" + clip(t.text)).join("\n\n");
+    const ask = a.role === "builder" ? (lastDraftIdx < 0 ? "Write the deliverable now." : "Revise the latest draft using the feedback above and return the full deliverable.")
+      : a.role === "judge" ? (lastDraftIdx < 0 ? "There is no draft yet. Say what the builder must get right." : "Judge the latest draft. First line APPROVED if it is ready; otherwise list the problems.")
+      : "Add your input for round " + round + ".";
+    return "TASK:\n" + task + (ctx ? "\n\nTEAM SO FAR:\n" + ctx : "") + "\n\nYOUR TURN (" + a.name + "): " + ask;
+  }
+
+  function logTurn(cls, title, sub, text){
+    $("track").querySelector(".empty")?.remove();
+    const pre = el("pre", { textContent: text });
+    const art = el("article", { className: "turn " + cls }, el("h3", { textContent: title }, el("span", { textContent: sub })), pre);
+    $("track").appendChild(art);
+    return { art, pre };
+  }
+
+  let controller = null;
+  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("led").classList.toggle("on", on); }
+
+  $("task").value = store.get("task", "");
+  $("task").addEventListener("input", () => store.set("task", $("task").value));
+
+  $("taskForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const status = $("status"), task = $("task").value.trim();
+    status.className = "status";
+    if (!task) { status.className = "status err"; status.textContent = "Type a task first."; return; }
+    const missing = [...new Set(team.filter(a => a.provider !== "custom" && !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
+    if (missing.length) { $("connPanel").open = true; status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under Connections, or move those teammates to a provider you've connected."; return; }
+
+    $("track").textContent = ""; lastSaid.clear(); scene.allHome(); scene.clearMarks();
+    controller = new AbortController(); const sig = controller.signal;
+    setRunning(true);
+    const rounds = +$("rounds").value;
+    const judges = team.filter(a => a.role === "judge");
+    const turns = []; let approved = false, r = 1, failures = 0;
+    say("RELAY", null, "New task on the board! Everyone, places.");
+    try {
+      for (; r <= rounds; r++) {
+        scene.setRound(r);
+        const verdicts = [];
+        for (let i = 0; i < team.length; i++) {
+          const a = team[i];
+          if (r > 1 && !a.every) continue;
+          if (sig.aborted) throw new DOMException("Stopped", "AbortError");
+          const npc = scene.npc(i);
+          status.textContent = "ROUND " + r + "/" + rounds + " · " + a.name.toUpperCase();
+          const call = callAgent(a, buildPrompt(a, task, turns, r), sig).then(text => ({ text }), err => ({ err }));
+          await scene.toBoard(npc);
+          npc.bubble = "dots";
+          const res = await call;
+          if (res.err) {
+            if (res.err.name === "AbortError") throw res.err;
+            failures++;
+            const msg = isNetErr(res.err) ? a.name + " couldn't reach " + PROVIDERS[a.provider].name + ". Skipped this turn." : res.err.message + " Skipped this turn.";
+            npc.bubble = "cross"; say(a.name, a.role, msg); logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, msg);
+          } else {
+            const text = res.text;
+            turns.push({ name: a.name, role: a.role, round: r, text }); lastSaid.set(i, text);
+            const ok = a.role === "judge" ? /^\W*APPROVED/i.test(text.split("\n")[0]) : null;
+            if (a.role === "judge") verdicts.push(ok);
+            npc.bubble = a.role === "judge" ? (ok ? "check" : "cross") : "bang";
+            scene.mark(ROLE_SHIRT[a.role]);
+            say(a.name, a.role, text);
+            logTurn(a.role, a.name + " · " + (a.title || a.role) + " · R" + r, PROVIDERS[a.provider].name + " · " + a.model, text);
+          }
+          await sleep(900);
+          npc.bubble = null; scene.toDesk(npc);
+        }
+        const hasDraft = turns.some(t => t.role === "builder");
+        if (judges.length && hasDraft && verdicts.length === judges.length && verdicts.every(Boolean)) { approved = true; break; }
+      }
+      const draft = [...turns].reverse().find(t => t.role === "builder") || turns[turns.length - 1];
+      if (!draft) throw new Error("No teammate produced a reply. Check the log.");
+      const done = Math.min(r, rounds);
+      const fin = logTurn("final", approved ? "★ FINAL · APPROVED" : judges.length ? "FINAL · ROUND LIMIT" : "FINAL", draft.name + (approved ? " · round " + done : ""), draft.text);
+      const btn = el("button", { type: "button", className: "tiny copy", textContent: "COPY FINAL" });
+      btn.onclick = async () => {
+        try { await navigator.clipboard.writeText(draft.text); btn.textContent = "COPIED"; }
+        catch { const rg = document.createRange(); rg.selectNodeContents(fin.pre); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); btn.textContent = "SELECTED · TAP COPY"; }
+      };
+      fin.art.appendChild(btn);
+      if (approved) { scene.celebrate(); say("RELAY", null, "Every judge signed off. Quest complete! The final version is at the bottom of the log."); }
+      else say("RELAY", null, judges.length ? "Out of rounds. The last draft is in the log as the final." : "Done! The final version is at the bottom of the log.");
+      status.className = "status ok";
+      status.textContent = (approved ? "QUEST COMPLETE" : "DONE") + (failures ? " · " + failures + " TURN" + (failures > 1 ? "S" : "") + " SKIPPED" : "");
+    } catch (err) {
+      status.className = "status err";
+      status.textContent = err.name === "AbortError" ? "STOPPED" : err.message;
+      say("RELAY", null, err.name === "AbortError" ? "Meeting cancelled. Everyone back to your desks." : err.message);
+      scene.allHome();
+    } finally { setRunning(false); controller = null; }
+  });
+  $("stop").onclick = () => controller?.abort();
+
+  /* ================= boot ================= */
+  scene.sync(team);
+  renderConns(); saveConn(); renderTeam(); saveTeam();
+  if (!Object.values(conn).some(c => c.key)) $("connPanel").open = true;
+  for (const pid in PROVIDERS) if (conn[pid].key && conn[pid].ok) fetchModels(pid).catch(() => {});
+  fetchModels("openrouter").catch(() => {});
+  document.fonts?.load("8px 'Press Start 2P'").catch(() => {});
+})();
+</script>
+</body>
+</html>
