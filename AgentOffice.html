@@ -120,6 +120,8 @@ a{color:var(--helper)}
 .turn h3 span{font:13px var(--body);color:var(--muted);overflow-wrap:anywhere}
 .turn pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--body)}
 .turn .copy{margin-top:10px}
+.turn .more{margin-top:8px}
+.turn.clip pre{max-height:6em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 50%,transparent);mask-image:linear-gradient(#000 50%,transparent)}
 .shots{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .shots a{display:block;text-decoration:none}
 .shots img{display:block;width:100%;height:auto;border:2px solid var(--win-edge);border-radius:4px;background:var(--win-inner)}
@@ -170,6 +172,22 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 .job .row{align-items:center}
 .job.done{opacity:.6}
 .job.merge{border-left-color:var(--ok)}
+.job.pick-card{border-left-color:var(--gold)}
+.job.flash{animation:flash 1.2s 2}
+@keyframes flash{50%{box-shadow:0 0 0 4px var(--gold)}}
+.picks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pick-tile{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pick{display:flex;flex-direction:column;gap:4px;padding:4px;border:3px solid var(--win-inner);border-radius:6px;background:#fff;text-align:left;font:14px/1.3 var(--body);color:var(--ink);box-shadow:none;min-height:0}
+.pick img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:3px;image-rendering:auto}
+.pick .lbl{font:8px/1.5 var(--px)}
+.pick[aria-pressed="true"]{border-color:var(--ok);box-shadow:0 0 0 2px var(--ok)}
+.pick[aria-pressed="true"] .lbl::after{content:" ✓";color:var(--ok)}
+.pick-tile a{font:13px var(--body);color:var(--muted)}
+.link{font:14px/1.35 var(--body);overflow-wrap:anywhere;color:var(--ink)}
+/* notice: a banner for something waiting on the owner (an image to pick, a link that just went live) */
+.notice{position:sticky;top:6px;z-index:20;display:flex;flex-direction:column;gap:6px;border-color:var(--gold);box-shadow:inset 0 0 0 2px var(--gold),0 4px 0 var(--shell-dark)}
+.notice b{font:10px/1.6 var(--px);font-weight:400}
+.notice .row{align-items:center}
 .hist{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;font:15px/1.3 var(--body);box-shadow:0 2px 0 var(--win-edge);padding:8px 10px}
 .hist span{font:8px var(--px);color:var(--muted);white-space:nowrap}
 #inbox-pr{flex:0 0 76px}
@@ -192,6 +210,8 @@ fieldset:disabled .lock{display:block}
     <div class="tb-text" id="tbText">Welcome to the office! Pick a job or a playbook, add the details, then press START. Keys and team live behind ⚙. Tap any teammate to hear what they last said.</div>
     <div class="tb-arrow" aria-hidden="true">▼</div>
   </section>
+
+  <section class="win notice" id="notice" hidden aria-live="assertive"></section>
 
   <section class="win" id="jobsWin" hidden>
     <h2>Jobs from Claude <span class="hint" id="jobCount"></span></h2>
@@ -1173,10 +1193,35 @@ Every recommendation must say why: the target search phrase and intent, the data
       "NOT VERIFIED: every claim, study, product detail or number that nobody confirmed against a real source. Write \"Nothing flagged\" only if there truly is none.\nKeep it under " + (article ? 260 : 180) + " words.";
   }
 
+  // errors read as one short line; the provider's full message is behind DETAILS
+  function shortErr(msg){
+    const m = String(msg), next = /Trying (.+?) instead\./.exec(m);
+    const body = m.replace(/^[^:\n]{1,80}\([^)\n]*\):\s*/, "");
+    const what = /needs a model that can see images/i.test(body) ? "No backup model that can see images. Try again in a minute."
+      : /high demand|overloaded|temporarily unavailable|UNAVAILABLE/i.test(body) ? "Busy right now."
+      : /rate limit|tokens per minute|quota|too many requests/i.test(body) ? "Hit its free limit."
+      : /longer than|timed out/i.test(body) ? "Took too long to answer."
+      : (body.split(/(?<=[.!?])\s/)[0] || body).slice(0, 140);
+    return what + (next ? " Trying " + next[1] + "." : / Skipped this turn\.$/.test(m) ? " Skipped." : "");
+  }
+  // long turns start folded to a few lines (MORE opens them); the final result always shows in full
   function logTurn(cls, title, sub, text){
     $("track").querySelector(".empty")?.remove();
-    const pre = el("pre", { textContent: text });
+    const short = cls === "error" && text.length > 90 ? shortErr(text) : "";
+    const pre = el("pre", { textContent: short || text });
     const art = el("article", { className: "turn " + cls }, el("h3", { textContent: title }, el("span", { textContent: sub })), pre);
+    const fold = !short && cls !== "final" && (text.length > 280 || text.split("\n").length > 5);
+    if (short || fold) {
+      if (fold) art.classList.add("clip");
+      const label = short ? "DETAILS" : "MORE ▾", more = el("button", { type: "button", className: "tiny more", textContent: label });
+      more.setAttribute("aria-expanded", "false");
+      more.onclick = () => {
+        const open = more.getAttribute("aria-expanded") !== "true";
+        more.setAttribute("aria-expanded", String(open)); more.textContent = open ? "LESS ▴" : label;
+        if (short) pre.textContent = open ? text : short; else art.classList.toggle("clip", !open);
+      };
+      art.appendChild(more);
+    }
     $("track").appendChild(art);
     return { art, pre };
   }
@@ -1434,10 +1479,112 @@ Every recommendation must say why: the target search phrase and intent, the data
     jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs();
     return card;
   }
+  // relay-merged may carry the live page's url; the card and the notice then offer COPY LINK
   function markLive(json){
-    const m = parseMeta(json); if (!m) return;
-    jobs.forEach(x => { if (x.type === "merge" && x.branch === m.branch && (!m.repo || x.repo === m.repo)) x.status = "live"; });
+    const m = parseMeta(json); if (!m) return null;
+    const url = typeof m.url === "string" && /^https:\/\/[^\s"'<>]+$/.test(m.url) ? m.url : "";
+    let hit = null;
+    jobs.forEach(x => { if (x.type === "merge" && x.branch === m.branch && (!m.repo || x.repo === m.repo)) { x.status = "live"; if (url) { x.url = url; x.noticed = false; } hit = x; } });
+    if (!hit && url) {
+      hit = { id: "live-" + Date.now(), type: "merge", title: String(m.title || "Now live").slice(0, 120), repo: String(m.repo || ""), branch: String(m.branch || ""), sha: "", request: 0, url, at: Date.now(), status: "live", task: "" };
+      jobs.unshift(hit); jobs = jobs.slice(0, 30);
+    }
     saveJobs();
+    if (hit?.url) buzz();
+    return hit;
+  }
+  const buzz = () => { try { navigator.vibrate?.(80); } catch {} };
+  // copies on tap; if the clipboard is blocked, shows the text so it can be copied by hand
+  async function copyText(text, btn, label){
+    try { await navigator.clipboard.writeText(text); btn.textContent = "COPIED ✓"; }
+    catch { prompt("Copy this:", text); }
+    setTimeout(() => { btn.textContent = label; }, 2000);
+  }
+  function linkButtons(url){
+    const copy = el("button", { type: "button", className: "tiny", textContent: "COPY LINK" });
+    copy.onclick = () => copyText(url, copy, "COPY LINK");
+    const open = el("button", { type: "button", className: "tiny", textContent: "OPEN" });
+    open.onclick = () => window.open(url, "_blank", "noopener");
+    return [copy, open];
+  }
+
+  /* ----- image picks: Claude offers images with relay-pick; the owner taps the one(s) to use and the choice goes back as relay-picked ----- */
+  const PICK_RE = /<!-- relay-pick:v1 (\{[\s\S]*?\}) -->/, PICKED_MARK = "<!-- relay-picked:v1";
+  // only images hosted in the inbox repo itself (GitHub raw files or its Pages site), the same rule as screenshots
+  function repoImage(url){
+    const [owner, name] = inbox.repo.split("/");
+    const esc = v => String(v || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return typeof url === "string" && new RegExp("^(?:https://raw\\.githubusercontent\\.com/" + esc(owner) + "/" + esc(name) + "/|https://" + esc(owner) + "\\.github\\.io/" + esc(name) + "/)[^\\s\"'<>]+?\\.(?:png|jpe?g|webp|gif)$", "i").test(url);
+  }
+  function addPick(json, commentId){
+    const m = parseMeta(json);
+    if (!m || !Array.isArray(m.options) || jobs.some(x => x.id === "pick-" + commentId)) return null;
+    const options = m.options.filter(o => o && repoImage(o.url)).slice(0, 8)
+      .map((o, k) => ({ id: String(o.id || String.fromCharCode(65 + k)).slice(0, 12), label: String(o.label || "").slice(0, 80), url: o.url }));
+    if (!options.length) return null;
+    const card = { id: "pick-" + commentId, type: "pick", title: String(m.title || "Pick an image").slice(0, 120), note: String(m.note || "").slice(0, 300),
+      multi: !!m.multi, options, request: commentId, chosen: [], at: Date.now(), status: "new", task: "" };
+    jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs(); buzz();
+    return card;
+  }
+  function pickCard(j){
+    const st = el("div", { className: "status" }), open = j.status === "new", sel = new Set(j.chosen || []);
+    const send = el("button", { type: "button", className: "tiny", textContent: j.multi ? "SEND CHOICES" : "SEND CHOICE", disabled: !sel.size });
+    const tiles = [];
+    const grid = el("div", { className: "picks" }, ...j.options.map(o => {
+      const b = el("button", { type: "button", className: "pick", disabled: !open },
+        el("img", { src: o.url, alt: o.label || "Option " + o.id, loading: "lazy" }),
+        el("span", { className: "lbl", textContent: o.id }), o.label ? el("span", { textContent: o.label }) : "");
+      b.setAttribute("aria-pressed", String(sel.has(o.id)));
+      b.onclick = () => {
+        if (j.multi && sel.has(o.id)) sel.delete(o.id);
+        else { if (!j.multi) sel.clear(); sel.add(o.id); }
+        tiles.forEach((t, k) => t.setAttribute("aria-pressed", String(sel.has(j.options[k].id))));
+        send.disabled = !sel.size;
+      };
+      tiles.push(b);
+      return el("div", { className: "pick-tile" }, b, el("a", { href: o.url, target: "_blank", rel: "noopener", textContent: "View full size" }));
+    }));
+    send.onclick = async () => {
+      if (!inboxReady()) { st.className = "status err"; st.textContent = "Connect the Claude inbox under ⚙ first."; return; }
+      const choices = j.options.filter(o => sel.has(o.id));
+      send.disabled = true; st.className = "status"; st.textContent = "SENDING…";
+      const body = PICKED_MARK + " " + JSON.stringify({ request: j.request, choices: choices.map(o => o.id) }) + " -->\n**Picked:** " +
+        choices.map(o => o.id + (o.label ? " (" + o.label + ")" : "")).join(", ") + " for " + j.title;
+      try {
+        const c = await ghFetch(gh("/issues/" + inbox.pr + "/comments"), { method: "POST", body: JSON.stringify({ body }) });
+        inbox.seen.push(c.id); saveInbox();
+        j.status = "chosen"; j.chosen = choices.map(o => o.id); j.noticed = true; saveJobs();
+        say("RELAY", null, "Sent your pick to Claude: " + j.chosen.join(", ") + ".");
+      } catch (e) { send.disabled = false; st.className = "status err"; st.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message; }
+    };
+    const del = el("button", { type: "button", className: "tiny", textContent: "✕" });
+    del.setAttribute("aria-label", "Remove " + j.title);
+    del.onclick = () => { jobs = jobs.filter(x => x !== j); saveJobs(); };
+    return el("div", { className: "job pick-card" + (open ? "" : " done"), id: "card-" + j.id },
+      el("b", { textContent: j.title }),
+      el("div", { className: "small", textContent: open ? (j.note || (j.multi ? "Tap the ones you want, then send." : "Tap one, then send.")) : "SENT TO CLAUDE · YOU PICKED " + j.chosen.join(", ") }),
+      grid, el("div", { className: "row" }, ...(open ? [send] : []), del), st);
+  }
+
+  /* ----- notice: one banner at a time for what's waiting on the owner ----- */
+  function renderNotice(){
+    const box = $("notice"); box.textContent = "";
+    const j = jobs.find(x => !x.noticed && ((x.type === "pick" && x.status === "new") || (x.type === "merge" && x.status === "live" && x.url)));
+    box.hidden = !j;
+    try { const n = jobs.filter(x => x.status === "new").length; if (n) navigator.setAppBadge?.(n)?.catch?.(() => {}); else navigator.clearAppBadge?.()?.catch?.(() => {}); } catch {}
+    if (!j) return;
+    const dismiss = el("button", { type: "button", className: "tiny", textContent: "✕" });
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.onclick = () => { j.noticed = true; saveJobs(); };
+    if (j.type === "pick") {
+      const go = el("button", { type: "button", className: "tiny", textContent: j.multi ? "CHOOSE IMAGES" : "CHOOSE IMAGE" });
+      go.onclick = () => { j.noticed = true; saveJobs(); const c = document.getElementById("card-" + j.id); if (!c) return; c.classList.add("flash"); c.scrollIntoView({ block: "start", behavior: "smooth" }); };
+      box.append(el("b", { textContent: "★ IMAGES READY TO PICK" }), el("div", { className: "small", textContent: j.title + " · " + j.options.length + " options" }), el("div", { className: "row" }, go, dismiss));
+    } else {
+      box.append(el("b", { textContent: "★ LIVE NOW" }), el("div", { className: "small", textContent: j.title }), el("div", { className: "link", textContent: j.url }),
+        el("div", { className: "row" }, ...linkButtons(j.url), dismiss));
+    }
   }
   async function sendDecision(j, decision, note){
     const meta = { repo: j.repo, branch: j.branch, sha: j.sha, request: j.request, decision };
@@ -1469,21 +1616,24 @@ Every recommendation must say why: the target search phrase and intent, the data
     go.onclick = () => decide("merge");
     ch.onclick = () => { note.hidden = !note.hidden; send.hidden = note.hidden; if (!note.hidden) note.focus(); };
     send.onclick = () => { if (note.value.trim()) decide("changes", note.value.trim()); else note.focus(); };
-    const open = j.status === "new";
-    return el("div", { className: "job merge" + (open ? "" : " done") },
+    const open = j.status === "new", link = j.status === "live" && j.url;
+    return el("div", { className: "job merge" + (open || link ? "" : " done") },
       el("b", { textContent: j.title }),
-      el("div", { className: "small", textContent: MERGE_STATUS[j.status] + " · " + j.repo.split("/").pop() + " · " + j.branch }),
-      open ? el("div", { className: "row" }, go, ch, del) : el("div", { className: "row" }, del),
+      el("div", { className: "small", textContent: [MERGE_STATUS[j.status], j.repo.split("/").pop(), j.branch].filter(Boolean).join(" · ") }),
+      link ? el("div", { className: "link", textContent: j.url }) : "",
+      open ? el("div", { className: "row" }, go, ch, del) : link ? el("div", { className: "row" }, ...linkButtons(j.url), del) : el("div", { className: "row" }, del),
       note, send, st);
   }
   function renderJobs(){
     const box = $("jobs"); box.textContent = "";
+    renderNotice();
     $("jobsWin").hidden = !jobs.length && !inboxReady();
     const open = jobs.filter(j => j.status === "new").length;
     $("jobCount").textContent = open ? open + " NEW" : "";
     if (!jobs.length) { box.appendChild(el("div", { className: "empty", textContent: "No jobs yet. Claude posts work here for the team to draft." })); return; }
     jobs.forEach(j => {
       if (j.type === "merge") return box.appendChild(mergeCard(j));
+      if (j.type === "pick") return box.appendChild(pickCard(j));
       const runBtn = el("button", { type: "button", className: "tiny", textContent: j.status === "new" ? "RUN" : "RUN AGAIN" });
       runBtn.onclick = () => {
         if (controller) return;
@@ -1638,8 +1788,11 @@ Every recommendation must say why: the target search phrase and intent, the data
         if (body.includes(JOB_MARK)) { const job = addJob(parseJob(body)); if (job) claudeSays("New job for the team: " + job.title + ". It's at the top of the screen. Tap RUN when you're ready.", c.created_at, true); continue; }
         let text = body.replace(FOOTER, "").trim(), card = null;
         const mr = MERGE_RE.exec(text); if (mr) { card = addMerge(mr[1], c.id); text = text.replace(MERGE_RE, "").trim(); }
-        const md = MERGED_RE.exec(text); if (md) { markLive(md[1]); text = text.replace(MERGED_RE, "").trim(); }
-        claudeSays(text + (card ? "\n\n[Ready to merge: tap MERGE IT at the top when you're happy, or CHANGES to send notes.]" : ""), c.created_at);
+        let live = null, pick = null;
+        const md = MERGED_RE.exec(text); if (md) { live = markLive(md[1]); text = text.replace(MERGED_RE, "").trim(); }
+        const pk = PICK_RE.exec(text); if (pk) { pick = addPick(pk[1], c.id); text = text.replace(PICK_RE, "").trim(); }
+        claudeSays(text + (card ? "\n\n[Ready to merge: tap MERGE IT at the top when you're happy, or CHANGES to send notes.]" : "") +
+          (pick ? "\n\n[Images to pick: tap CHOOSE at the top.]" : "") + (live?.url ? "\n\n[It's live: tap COPY LINK at the top.]" : ""), c.created_at);
       }
       inbox.seen = inbox.seen.slice(-200); saveInbox();
     } catch {} finally { polling = false; }

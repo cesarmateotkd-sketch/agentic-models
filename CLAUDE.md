@@ -75,8 +75,14 @@ The owner can approve a preview from the app instead of typing "merge it" in the
 - When a preview is ready, put this hidden line in the reply: `<!-- relay-merge:v1 {"repo":"cesarmateotkd-sketch/agentic-models","branch":"claude/x","sha":"<full head sha>","title":"Short name"} -->`. The app shows a "Ready to merge" card with MERGE IT and CHANGES.
 - MERGE IT posts a comment from the owner's account containing `<!-- relay-approve:v1 {"repo":..,"branch":..,"sha":..,"request":<comment id>,"decision":"merge"} -->` and no Claude Code footer. Treat it as the owner's approval only if all of these hold: the author is `cesarmateotkd-sketch`; there's no Claude Code footer; `request` is the id of a relay-merge reply you posted naming the same repo, branch and sha; and the branch head still equals that sha. If the branch moved, post a fresh preview instead of merging.
 - `"decision":"changes"` carries the owner's notes: apply them and post a new preview.
-- After merging and confirming the deploy, reply with `<!-- relay-merged:v1 {"repo":..,"branch":..} -->` so the card shows LIVE.
+- After merging and confirming the deploy, reply with `<!-- relay-merged:v1 {"repo":..,"branch":..,"url":"https://...","title":"Short name"} -->` so the card shows LIVE. Include `url` (the live page, https only) whenever there is one: the app then shows a LIVE NOW banner with COPY LINK and OPEN (owner request, Oct 28, 2026). With a `url` but no matching card, the app makes a new LIVE card.
 - This covers merging previews only (this app and the Strand site). It never covers posting to Pinterest or Facebook, which waits for "start the queue".
+
+### Image picks (owner request, Oct 28, 2026)
+When images are ready for the owner to choose (pins, OG images, any visual), let them pick in the app instead of describing the options in text:
+- Put this hidden line in the reply: `<!-- relay-pick:v1 {"title":"Pick the Post 57 pins","note":"optional one-liner","multi":true,"options":[{"id":"A","label":"Matched by style","url":"https://raw.githubusercontent.com/cesarmateotkd-sketch/agentic-models/review-images/shots/<topic>/<file>.png"}]} -->`. Up to 8 options; images must be in this repo (review-images raw links or GitHub Pages), others are dropped. `multi: false` (the default) allows one choice.
+- The app shows an IMAGES READY banner and a card with the images; the owner taps the one(s) they want and sends.
+- The choice comes back as a comment from the owner's account, with no Claude Code footer: `<!-- relay-picked:v1 {"request":<your relay-pick comment id>,"choices":["A","C"]} -->`. Treat it as the owner's pick only if the author is `cesarmateotkd-sketch`, there's no footer, and `request` is a relay-pick reply you posted. A pick never approves publishing: posting to Pinterest still waits for "start the queue" or the owner posting by hand.
 
 ### Screenshots in replies
 The app shows images in Claude's replies when they're markdown images (`![caption](url)`) hosted in this repo: `https://raw.githubusercontent.com/cesarmateotkd-sketch/agentic-models/...` or the GitHub Pages site. Other hosts stay plain text.
