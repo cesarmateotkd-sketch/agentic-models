@@ -20,7 +20,7 @@
 :root{
   --shell:#3f3b8f; --shell-dark:#2c2a6b; --bezel:#1d1c3b;
   --win:#f8f8f0; --win-edge:#3a4870; --win-inner:#a8c0e8; --ink:#283040; --muted:#5e6a86;
-  --builder:#f0a030; --judge:#d84890; --helper:#4878e8; --ok:#30a860; --err:#d83838; --gold:#f8c838;
+  --builder:#f0a030; --judge:#d84890; --helper:#4878e8; --ok:#30a860; --err:#d83838; --gold:#f8c838; --claude:#d97757;
   --px:"Press Start 2P",ui-monospace,Menlo,monospace;
   --body:"Pixelify Sans",ui-rounded,system-ui,sans-serif;
   color-scheme:light;
@@ -115,11 +115,14 @@ a{color:var(--helper)}
 /* log */
 #track{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .turn{border:2px solid var(--win-edge);border-left:8px solid var(--c);border-radius:6px;padding:10px 12px;background:#fff;min-width:0}
-.turn.builder{--c:var(--builder)}.turn.judge{--c:var(--judge)}.turn.helper{--c:var(--helper)}.turn.final{--c:var(--ok)}.turn.error{--c:var(--err)}
+.turn.builder{--c:var(--builder)}.turn.judge{--c:var(--judge)}.turn.helper{--c:var(--helper)}.turn.final{--c:var(--ok)}.turn.error{--c:var(--err)}.turn.claude{--c:var(--claude)}
 .turn h3{margin:0 0 6px;font:9px/1.5 var(--px);color:var(--ink);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .turn h3 span{font:13px var(--body);color:var(--muted);overflow-wrap:anywhere}
 .turn pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--body)}
 .turn .copy{margin-top:10px}
+.handoff{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:2px dashed var(--win-inner);padding-top:10px}
+.handoff textarea{min-height:56px;font-size:16px}
+#inbox-pr{flex:0 0 76px}
 .empty{color:var(--muted);font-size:15px;text-align:center;padding:8px}
 fieldset{border:0;margin:0;padding:0;min-width:0}
 fieldset:disabled .agent{opacity:.6}
@@ -269,6 +272,7 @@ fieldset:disabled .lock{display:block}
       kids.push(status);
       box.appendChild(el("div", { className: "conn" }, ...kids));
     }
+    box.appendChild(inboxCard());
   }
   function paintChip(chip, c){
     chip.className = "chip" + (c.ok === true ? " ok" : c.ok === false ? " err" : "");
@@ -420,7 +424,10 @@ fieldset:disabled .lock{display:block}
         n.path = pts.slice(); n.resolve = res;
       });
     }
-    function finishWalks(){ npcs.forEach(n => { if (!n.path.length) return; const p = n.path[n.path.length - 1]; n.x = p.x; n.y = p.y; n.path = []; if (n.resolve) { const r = n.resolve; n.resolve = null; r(); } }); }
+    const CLAUDE_SPOT = { x: 82, y: 46 }, CLAUDE_BOARD = { x: 104, y: 46 };
+    const claude = { x: CLAUDE_SPOT.x, y: CLAUDE_SPOT.y, path: [], resolve: null, bubble: null, away: false, idx: 99, home: { desk: false }, pal: { hair: "#efe6d6", shirt: "#d97757" }, agent: null, show: false };
+    const everyone = () => claude.show ? npcs.concat(claude) : npcs;
+    function finishWalks(){ everyone().forEach(n => { if (!n.path.length) return; const p = n.path[n.path.length - 1]; n.x = p.x; n.y = p.y; n.path = []; if (n.resolve) { const r = n.resolve; n.resolve = null; r(); } }); }
     document.addEventListener("visibilitychange", () => { if (document.hidden) finishWalks(); });
     // Paths only use the aisle above each desk row and the clear column at x=120, so nobody crosses a desk.
     // If a walk is cut short, the next one first steps back onto its own aisle from wherever the NPC is.
@@ -491,7 +498,7 @@ fieldset:disabled .lock{display:block}
 
     function step(now){
       const dt = Math.min(.05, (now - last) / 1000); last = now; t += dt;
-      for (const n of npcs) {
+      for (const n of everyone()) {
         if (!n.path.length) continue;
         const p = n.path[0], dx = p.x - n.x, dy = p.y - n.y, d = Math.hypot(dx, dy), v = 70 * dt;
         if (d <= v) { n.x = p.x; n.y = p.y; n.path.shift(); if (!n.path.length && n.resolve) { const r = n.resolve; n.resolve = null; r(); } }
@@ -503,7 +510,7 @@ fieldset:disabled .lock{display:block}
       room();
       // painter's order by feet/front-edge y: an NPC whose feet are above a desk's front edge is drawn behind it
       const items = [];
-      npcs.forEach(n => {
+      everyone().forEach(n => {
         if (n.home.desk) items.push({ z: n.home.dtop + 12, desk: true, n });
         items.push({ z: n.y + (n.away ? .5 : 0), n });
       });
@@ -515,10 +522,17 @@ fieldset:disabled .lock{display:block}
 
     cv.addEventListener("click", e => {
       const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * 240 / r.width, py = (e.clientY - r.top) * 160 / r.height;
-      const hit = npcs.slice().reverse().find(n => Math.abs(n.x - px) <= 7 && py >= n.y - 17 && py <= n.y + 1);
+      const hit = everyone().slice().reverse().find(n => Math.abs(n.x - px) <= 7 && py >= n.y - 17 && py <= n.y + 1);
       if (hit) onTap(hit.agent);
     });
-    return { sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
+    async function claudeVisit(){
+      if (!claude.show) return;
+      await walk(claude, [CLAUDE_BOARD]);
+      claude.bubble = "bang"; await sleep(2500); claude.bubble = null;
+      await walk(claude, [CLAUDE_SPOT]);
+    }
+    function setClaude(agent){ claude.agent = agent; claude.show = !!agent; if (!agent) { claude.path = []; claude.x = CLAUDE_SPOT.x; claude.y = CLAUDE_SPOT.y; } }
+    return { setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
   })();
 
   /* ================= dialogue box ================= */
@@ -536,6 +550,7 @@ fieldset:disabled .lock{display:block}
   const lastSaid = new Map();
   function onTap(a){
     const said = lastSaid.get(a);
+    if (a === CLAUDE) return say("Claude", "claude", said || "I'm Claude, your Claude Code session. Finish a run, then press SEND TO CLAUDE and I'll take it from there. My replies show up here and in the log.");
     say(a.name, a.role, said || `I'm ${a.name}, the ${a.title || a.role}. I run on ${PROVIDERS[a.provider]?.name || "?"} (${a.model}).`);
   }
 
@@ -692,6 +707,10 @@ fieldset:disabled .lock{display:block}
         catch { const rg = document.createRange(); rg.selectNodeContents(fin.pre); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); btn.textContent = "SELECTED · TAP COPY"; }
       };
       fin.art.appendChild(btn);
+      const verdictLine = approved ? "Approved by " + judges.filter(j => verdicts.get(j)).map(j => j.name).join(", ") + " in round " + done + "."
+        : judges.length ? "Not approved: hit the " + rounds + "-round limit." : "No judges on the team.";
+      const lastJudge = approved ? null : [...turns].reverse().find(t => t.role === "judge");
+      fin.art.appendChild(handoffControls({ task, draft, crew, verdictLine, lastJudge }));
       if (approved) { scene.celebrate(); say("RELAY", null, "Every judge signed off. Quest complete! The final version is at the bottom of the log."); }
       else say("RELAY", null, judges.length ? "Out of rounds. The last draft is in the log as the final." : "Done! The final version is at the bottom of the log.");
       status.className = "status ok";
@@ -705,6 +724,146 @@ fieldset:disabled .lock{display:block}
   });
   $("stop").onclick = () => controller?.abort();
 
+  /* ================= Claude inbox ================= */
+  // A run's result goes to a Claude Code session as a comment on a GitHub pull request the session is subscribed to.
+  // Claude replies on the same PR; the app polls for replies and shows them as the CLAUDE NPC.
+  const CLAUDE = { name: "Claude", role: "claude", title: "Claude Code session" };
+  const INBOX_MARK = "<!-- relay-office:v1 -->";
+  const FOOTER = /\n*-{3,}\s*\n+_?Generated by \[Claude Code\]\([^)]*\)_?\s*$/;
+  const inbox = Object.assign({ token: "", repo: "cesarmateotkd-sketch/agentic-models", pr: "1", ok: null, login: "", since: "", seen: [] }, store.get("inbox", {}));
+  const saveInbox = () => store.set("inbox", inbox);
+  const inboxReady = () => !!(inbox.token && inbox.repo && inbox.pr && inbox.ok);
+
+  async function ghFetch(url, opts = {}){
+    const headers = { Accept: "application/vnd.github+json", Authorization: "Bearer " + inbox.token };
+    if (opts.body) headers["Content-Type"] = "application/json";
+    const r = await fetch(url, Object.assign({}, opts, { headers }));
+    let j = null; try { j = await r.json(); } catch {}
+    if (!r.ok) {
+      const hint = r.status === 401 ? " The token is wrong or expired. Make a new one."
+        : r.status === 403 || r.status === 404 ? " Check the repo and PR number, and that the token has Pull requests: Read and write on this repo."
+        : r.status === 422 ? "" : "";
+      throw new Error("GitHub: " + ((j && j.message) || "HTTP " + r.status) + "." + hint);
+    }
+    return j;
+  }
+  const gh = path => "https://api.github.com/repos/" + inbox.repo + path;
+
+  function inboxCard(){
+    const chip = el("span", { className: "chip" });
+    const paint = () => { chip.className = "chip" + (inbox.ok === true ? " ok" : inbox.ok === false ? " err" : ""); chip.textContent = inbox.ok === true ? "WORKING" : inbox.ok === false ? "FAILED" : inbox.token ? "UNTESTED" : "NOT SET"; };
+    paint();
+    const reset = () => { inbox.ok = null; inbox.since = ""; inbox.seen = []; saveInbox(); paint(); scene.setClaude(null); };
+    const repo = el("input", { className: "mono", value: inbox.repo, placeholder: "owner/repo", autocapitalize: "off", spellcheck: false, id: "inbox-repo" });
+    repo.setAttribute("aria-label", "Inbox repository");
+    repo.addEventListener("change", () => { inbox.repo = repo.value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/+$/, ""); reset(); });
+    const pr = el("input", { className: "mono", value: inbox.pr, inputMode: "numeric", placeholder: "PR #", id: "inbox-pr" });
+    pr.setAttribute("aria-label", "Inbox pull request number");
+    pr.addEventListener("change", () => { inbox.pr = pr.value.replace(/\D/g, ""); reset(); });
+    const key = el("input", { type: "password", className: "mono", value: inbox.token, placeholder: "Paste GitHub token", autocomplete: "off", autocapitalize: "off", spellcheck: false, id: "inbox-token" });
+    key.setAttribute("aria-label", "GitHub token");
+    key.addEventListener("change", () => { inbox.token = key.value.trim(); reset(); });
+    const show = el("button", { type: "button", className: "tiny", textContent: "SHOW" });
+    show.onclick = () => { const h = key.type === "text"; key.type = h ? "password" : "text"; show.textContent = h ? "SHOW" : "HIDE"; };
+    const status = el("div", { className: "status" });
+    const test = el("button", { type: "button", className: "tiny", textContent: "TEST" });
+    test.onclick = async () => {
+      inbox.token = key.value.trim(); inbox.repo = repo.value.trim(); inbox.pr = pr.value.replace(/\D/g, "");
+      status.className = "status"; status.textContent = "TESTING…";
+      try {
+        if (!inbox.token || !inbox.repo || !inbox.pr) throw new Error("Fill in the repo, PR number and token.");
+        let login = inbox.repo.split("/")[0];
+        try { login = (await ghFetch("https://api.github.com/user")).login || login; } catch {}
+        const p = await ghFetch(gh("/pulls/" + inbox.pr));
+        if (p.state !== "open") throw new Error("PR #" + inbox.pr + " is closed. Reopen it or use another PR.");
+        if (!inbox.since) {
+          // start fresh: everything already on the PR counts as read
+          inbox.since = p.updated_at;
+          inbox.seen = (await ghFetch(gh("/issues/" + inbox.pr + "/comments?per_page=100&since=" + encodeURIComponent(inbox.since)))).map(c => c.id);
+        }
+        inbox.login = login; inbox.ok = true; saveInbox(); paint(); scene.setClaude(CLAUDE);
+        status.className = "status ok"; status.textContent = "Connected to “" + p.title + "” as " + login + ".";
+      } catch (e) {
+        inbox.ok = false; saveInbox(); paint(); scene.setClaude(null);
+        status.className = "status err"; status.textContent = isNetErr(e) ? "Couldn't reach GitHub. Check your connection." : e.message;
+      }
+    };
+    return el("div", { className: "conn" },
+      el("div", { className: "conn-head" }, el("b", { textContent: "Claude inbox" }), chip),
+      el("div", { className: "small", textContent: "Sends a finished run to your Claude Code session through a GitHub pull request, and shows Claude's replies here. Needs a fine-grained GitHub token for this repo only, with Pull requests: Read and write." }),
+      el("div", { className: "keyrow" }, repo, pr),
+      el("div", { className: "keyrow" }, key, show, test),
+      el("a", { href: "https://github.com/settings/personal-access-tokens/new", target: "_blank", rel: "noopener", className: "small", textContent: "Make a GitHub token ↗" }),
+      status);
+  }
+
+  // the longest run of backticks in the text, plus one, so the deliverable can't break out of its code fence
+  const fenceFor = t => "`".repeat(Math.max(3, ...(String(t).match(/`+/g) || []).map(m => m.length + 1)));
+  const quote = t => String(t).split("\n").map(l => "> " + l).join("\n");
+  function handoffBody({ task, draft, crew, verdictLine, lastJudge }, note){
+    const f = fenceFor(draft.text);
+    const parts = [
+      INBOX_MARK,
+      "### Relay Office handoff",
+      "**Task**\n" + quote(task),
+      note ? "**Note for Claude**\n" + quote(note) : "",
+      "**Outcome:** " + verdictLine,
+      "**Team:** " + crew.map(a => a.name + " (" + a.role + ", " + PROVIDERS[a.provider].name + " " + a.model + ")").join("; "),
+      "**Final deliverable** (by " + draft.name + ")\n" + f + "text\n" + clip(draft.text) + "\n" + f,
+      lastJudge ? "**Last judge feedback** (" + lastJudge.name + ")\n" + quote(clip(lastJudge.text)) : ""
+    ];
+    return parts.filter(Boolean).join("\n\n").slice(0, 60000);
+  }
+  function handoffControls(ctx){
+    const note = el("textarea", { placeholder: "Note for Claude (optional), e.g. “Use this as the intro for Post 57”" });
+    note.setAttribute("aria-label", "Note for Claude");
+    const send = el("button", { type: "button", className: "tiny", textContent: "SEND TO CLAUDE" });
+    const st = el("div", { className: "status" });
+    send.onclick = async () => {
+      if (!inboxReady()) { $("connPanel").open = true; $("inbox-token")?.scrollIntoView({ block: "center" }); st.className = "status err"; st.textContent = "Set up and TEST the Claude inbox under Connections first."; return; }
+      send.disabled = true; st.className = "status"; st.textContent = "SENDING…";
+      try {
+        const c = await ghFetch(gh("/issues/" + inbox.pr + "/comments"), { method: "POST", body: JSON.stringify({ body: handoffBody(ctx, note.value.trim()) }) });
+        inbox.seen.push(c.id); saveInbox();
+        send.textContent = "SENT"; note.disabled = true;
+        st.className = "status ok"; st.textContent = "SENT TO CLAUDE · REPLIES SHOW UP HERE";
+        say("RELAY", null, "Sent to Claude! When your Claude Code session replies, Claude walks over and the reply lands in the log.");
+        setTimeout(pollInbox, 15000);
+      } catch (e) {
+        send.disabled = false; st.className = "status err"; st.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message;
+      }
+    };
+    return el("div", { className: "handoff" }, note, send, st);
+  }
+
+  let polling = false;
+  async function pollInbox(){
+    if (!inboxReady() || !inbox.since || document.hidden || polling) return;
+    polling = true;
+    try {
+      const list = await ghFetch(gh("/issues/" + inbox.pr + "/comments?per_page=100&since=" + encodeURIComponent(inbox.since)));
+      for (const c of list) {
+        if (c.updated_at > inbox.since) inbox.since = c.updated_at;
+        if (inbox.seen.includes(c.id)) continue;
+        inbox.seen.push(c.id);
+        const body = c.body || "";
+        // only Claude's replies: posted through the owner's account, ending in the Claude Code footer. The repo is public, so ignore anyone else.
+        if (body.includes(INBOX_MARK) || c.user?.login !== inbox.login || !FOOTER.test(body)) continue;
+        claudeSays(body.replace(FOOTER, "").trim(), c.created_at);
+      }
+      inbox.seen = inbox.seen.slice(-200); saveInbox();
+    } catch {} finally { polling = false; }
+  }
+  function claudeSays(text, at){
+    lastSaid.set(CLAUDE, text);
+    logTurn("claude", "CLAUDE · REPLY", new Date(at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), text);
+    if (controller) return; // don't talk over a running relay; it's in the log
+    scene.claudeVisit();
+    say("Claude", "claude", text);
+  }
+  setInterval(pollInbox, 20000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollInbox(); });
+
   /* ================= boot ================= */
   scene.sync(team);
   renderConns(); saveConn(); renderTeam(); saveTeam();
@@ -712,6 +871,7 @@ fieldset:disabled .lock{display:block}
   for (const pid in PROVIDERS) if (conn[pid].key && conn[pid].ok) fetchModels(pid).catch(() => {});
   fetchModels("openrouter").catch(() => {});
   document.fonts?.load("8px 'Press Start 2P'").catch(() => {});
+  if (inboxReady()) { scene.setClaude(CLAUDE); pollInbox(); }
 })();
 </script>
 </body>

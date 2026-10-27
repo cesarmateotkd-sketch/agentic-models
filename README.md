@@ -33,6 +33,27 @@ After pasting a key, tap **TEST**. "WORKING" means the app could list that provi
 
 It opens full screen with its own pixel icon. The site root (`index.html`) redirects to `AgentOffice.html`.
 
+## Sending results to Claude Code (Claude inbox)
+
+The app can hand a finished run to a Claude Code session. Each handoff goes in as a comment on a GitHub pull request the session is subscribed to: [PR #1, "Relay inbox (do not merge)"](https://github.com/cesarmateotkd-sketch/agentic-models/pull/1). Claude does the work and replies on the PR. The app checks for replies every 20 seconds while it's open, and the CLAUDE NPC walks to the board to deliver each one.
+
+**One-time setup**
+1. In Safari, go to github.com → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → **Generate new token** ([direct link](https://github.com/settings/personal-access-tokens/new)).
+2. Set **Repository access** to *Only select repositories* → `agentic-models`.
+3. Under **Repository permissions**, set **Pull requests** to *Read and write*. Leave everything else off.
+4. Pick an expiry (90 days is fine), generate, and copy the token.
+5. In the app, open **Connections → Claude inbox**. Repo and PR are prefilled. Paste the token and tap **TEST**.
+
+**Use it:** after a run, type an optional note for Claude under the final result and tap **SEND TO CLAUDE**.
+
+**Connecting a new Claude Code session:** only one session listens at a time, and sessions end after a while. Start a new one and tell it: *"subscribe to the relay inbox PR in cesarmateotkd-sketch/agentic-models"*.
+
+**Safety**
+- The app only shows replies posted from your account that end with the Claude Code footer. The repo is public, so anyone else's comments are ignored.
+- Claude only acts on handoffs posted from your account.
+- Risky steps (pushing to `main`, deleting things, posting publicly) still get a yes from you in the Claude app.
+- The token can only read and comment on pull requests in this one repo.
+
 ## Updating the app
 
 - **Edit:** change `AgentOffice.html` (everything is in that one file) and push to `main`. GitHub Pages redeploys in about a minute.
