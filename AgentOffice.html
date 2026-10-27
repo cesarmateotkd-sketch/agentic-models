@@ -130,6 +130,19 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 .subbox{border:2px dashed var(--win-inner);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:10px}
 .subbox h3{margin:0;font:9px/1.5 var(--px)}
 [hidden]{display:none!important}
+/* Matrix skin: same layout, green-on-black terminal look; A/B become the red and blue pills */
+:root[data-skin="matrix"]{
+  --shell:#020a04; --shell-dark:#000; --bezel:#000;
+  --win:#06120a; --win-edge:#1f7a35; --win-inner:#0f3a1a; --ink:#8dffa6; --muted:#45b862;
+  --gold:#8dffa6; --claude:#c8ffd2; color-scheme:dark;
+}
+:root[data-skin="matrix"] body{background-image:radial-gradient(rgba(60,255,107,.08) 1px,transparent 1px)}
+:root[data-skin="matrix"] .brand{color:#3fae5c}
+:root[data-skin="matrix"] :is(input,textarea,select,button:not(.round-btn):not(.gear),.agent,.turn,.job,.hist){background:#0a1a0e;color:var(--ink)}
+:root[data-skin="matrix"] ::placeholder{color:#2f7f45}
+:root[data-skin="matrix"] canvas#office{background:#000}
+:root[data-skin="matrix"] .round-btn.b{background:#2f5bd8;border-color:#0f2a6b;box-shadow:0 4px 0 #0f2a6b}
+:root[data-skin="matrix"] .tb-arrow{color:#3cff6b}
 .gear{margin-left:auto;background:none;border:0;box-shadow:none;color:#b8b4e8;font:16px var(--px);padding:6px 8px;min-width:44px;min-height:36px}
 .gear[aria-expanded="true"]{color:var(--gold)}
 .settings{display:flex;flex-direction:column;gap:16px}
@@ -187,6 +200,12 @@ fieldset:disabled .lock{display:block}
   </form>
 
   <div class="settings" id="settings" hidden>
+  <section class="win">
+    <h2>Skin</h2>
+    <div class="stack"><label>Look of the app
+      <select id="skin"><option value="office">Office (classic)</option><option value="matrix">Matrix</option></select>
+    </label></div>
+  </section>
   <details class="win" id="teamPanel">
     <summary>Team <span class="hint" id="teamCount"></span></summary>
     <fieldset class="stack" id="teamFields">
@@ -232,6 +251,8 @@ fieldset:disabled .lock{display:block}
     set(k, v){ try { localStorage.setItem("relay2." + k, JSON.stringify(v)); } catch {} }
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let skin = store.get("skin", "office") === "matrix" ? "matrix" : "office";
+  const isMatrix = () => skin === "matrix";
   // keys and team sit behind the gear so the main screen is just the office, jobs, task, log and history
   function openSettings(panel, quiet){
     $("settings").hidden = false; $("gear").setAttribute("aria-expanded", "true");
@@ -460,16 +481,24 @@ fieldset:disabled .lock{display:block}
   const FEET = { idle: "..OBBO.OBBO.", walkA: ".OBBO..OBBO.", walkB: "..OBBO..OBBO" };
   const MINI = [".OOOOO.", "OHHHHHO", "OSESESO", "OSSSSSO", ".OSSSO.", "OCCCCCO", "OCDDDCO", ".OPOPO."];
   const MINI_FEET = { idle: ".BB.BB.", walkA: "BB..BB.", walkB: ".BB..BB" };
+  // Matrix skin: same silhouette, with sunglasses (K), white collar (W) and a tie (D) in the teammate's role color
+  const AGENT = BODY.map((row, y) => y === 4 ? ".OSKKKKKKSO." : y === 8 ? "..OCWWWWCO.." : y === 9 ? ".OCCCDDCCCO." : row);
+  const NEO = BODY.map((row, y) => y === 4 ? ".OSKKSSKKSO." : y === 12 ? "..OCCCCCCO.." : y === 13 ? "..OCPOOPCO.." : row);
+  const MINI_AGENT = MINI.map((row, y) => y === 2 ? "OSKKKSO" : row);
   const shade = (hex, f) => "#" + [1, 3, 5].map(i => Math.max(0, Math.min(255, Math.round(parseInt(hex.substr(i, 2), 16) * f))).toString(16).padStart(2, "0")).join("");
-  const palFor = a => ({ hair: HAIRS[a.hair % HAIRS.length], shirt: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper });
+  const palFor = a => isMatrix()
+    ? { kind: "agent", hair: shade(HAIRS[a.hair % HAIRS.length], .35), shirt: "#1e2326", tie: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper }
+    : { hair: HAIRS[a.hair % HAIRS.length], shirt: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper };
   const spriteCache = {};
   function sprite(pal, frame, mini){
-    const k = pal.hair + pal.shirt + frame + (mini ? "m" : "");
+    const k = (pal.kind || "") + pal.hair + pal.shirt + (pal.tie || "") + frame + (mini ? "m" : "");
     if (spriteCache[k]) return spriteCache[k];
     const c = document.createElement("canvas"); c.width = mini ? 7 : 12; c.height = mini ? 9 : 15;
     const x = c.getContext("2d");
-    const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: shade(pal.shirt, .7), P: "#485878", B: "#283040" };
-    (mini ? [...MINI, MINI_FEET[frame]] : [...BODY, FEET[frame]]).forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
+    const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: pal.tie || shade(pal.shirt, .7), P: "#485878", B: "#283040", K: "#050505", W: "#e8ece8" };
+    if (pal.kind) Object.assign(map, { O: "#0b0f0c", P: pal.kind === "neo" ? "#0b0b0b" : "#16191b", B: "#000" });
+    const rows = mini ? (pal.kind ? MINI_AGENT : MINI) : pal.kind === "neo" ? NEO : pal.kind ? AGENT : BODY;
+    (mini ? [...rows, MINI_FEET[frame]] : [...rows, FEET[frame]]).forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
     return spriteCache[k] = c;
   }
 
@@ -506,7 +535,8 @@ fieldset:disabled .lock{display:block}
       });
     }
     const CLAUDE_SPOT = { x: 82, y: 46 }, CLAUDE_BOARD = { x: 104, y: 46 };
-    const claude = { x: CLAUDE_SPOT.x, y: CLAUDE_SPOT.y, path: [], resolve: null, bubble: null, away: false, idx: 99, home: { desk: false }, pal: { hair: "#efe6d6", shirt: "#d97757" }, agent: null, show: false };
+    const CLAUDE_PAL = { hair: "#efe6d6", shirt: "#d97757" }, NEO_PAL = { kind: "neo", hair: "#0d0d0d", shirt: "#0e0e0e", tie: "#1c1c1c" };
+    const claude = { x: CLAUDE_SPOT.x, y: CLAUDE_SPOT.y, path: [], resolve: null, bubble: null, away: false, idx: 99, home: { desk: false }, pal: isMatrix() ? NEO_PAL : CLAUDE_PAL, agent: null, show: false };
     // interns work at a side table right of the whiteboard: a part of the floor no desk or aisle uses
     const INTERN_SPOTS = [{ x: 166, y: 57 }, { x: 178, y: 59 }, { x: 190, y: 57 }];
     let interns = [];
@@ -540,13 +570,46 @@ fieldset:disabled .lock{display:block}
     function celebrate(){
       npcs.forEach(n => n.bubble = "star");
       if (reduce) return;
-      for (let i = 0; i < 70; i++) confetti.push({ x: 120, y: 30, vx: (Math.random() - .5) * 140, vy: -Math.random() * 90 - 20, c: ["#f8c838", "#d84890", "#4878e8", "#30a860", "#f0a030"][i % 5], life: 2.2 });
+      const cols = isMatrix() ? ["#c8ffd2", "#3cff6b", "#1fa83f", "#8dffa6", "#0f7a2a"] : ["#f8c838", "#d84890", "#4878e8", "#30a860", "#f0a030"];
+      for (let i = 0; i < 70; i++) confetti.push({ x: 120, y: 30, vx: (Math.random() - .5) * 140, vy: -Math.random() * 90 - 20, c: cols[i % 5], life: 2.2 });
       setTimeout(() => npcs.forEach(n => { if (n.bubble === "star") n.bubble = null; }), 3500);
     }
 
     /* drawing helpers */
     const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+    // code rain: each 4px column has its own speed and phase, drawn as a bright head with a fading green tail
+    function rain(x0, y0, w, h){
+      ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, w, h); ctx.clip();
+      for (let x = x0; x < x0 + w; x += 4) {
+        const seed = (x * 37) % 23, speed = 10 + seed, head = ((t * speed + seed * 7) % (h + 24)) + y0 - 12;
+        ["#c8ffd2", "#3cff6b", "#22b84a", "#147a30", "#0b4a1d"].forEach((c, i) => R(x + 1, Math.round(head) - i * 4, 2, 3, c));
+      }
+      ctx.restore();
+    }
+    function roomMatrix(){
+      for (let y = 28; y < 160; y += 8) for (let x = 0; x < 240; x += 8) R(x, y, 8, 8, ((x + y) / 8) % 2 ? "#0b150d" : "#08110a");
+      for (let y = 28; y < 160; y += 16) R(0, y, 240, 1, "#10301a");
+      R(0, 0, 240, 26, "#020603"); rain(0, 0, 240, 24); R(0, 24, 240, 4, "#0f2a14"); R(0, 24, 240, 1, "#1f7a35");
+      [[10, 46], [184, 46]].forEach(([wx, ww]) => { R(wx - 2, 4, ww + 4, 17, "#1a201b"); R(wx, 5, ww, 15, "rgba(3,20,8,.55)"); R(wx + ww / 2 - 1, 5, 2, 15, "#1a201b"); });
+      R(90, 3, 60, 22, "#1a201b"); R(91, 4, 58, 20, "#2a322b"); R(92, 5, 56, 18, "#021a08");
+      ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#3cff6b";
+      ctx.fillText(round ? "R" + round : "READY", 95, 7);
+      marks.slice(-14).forEach((c, i) => R(95 + (i % 7) * 7, 16 + Math.floor(i / 7) * 3, 5, 2, i % 2 ? "#3cff6b" : "#1fa83f"));
+      R(162, 5, 12, 12, "#1a201b"); R(163, 6, 10, 10, "#021a08"); R(167, 7, 1, 4, "#3cff6b");
+      const a = t * .5; R(167 + Math.round(Math.cos(a) * 3), 10 + Math.round(Math.sin(a) * 3), 1, 1, "#c8ffd2");
+      R(100, 32, 40, 18, "#0f2a14"); R(102, 34, 36, 14, "#08180c"); R(104, 36, 32, 10, "#0b2010");
+      rack(6, 30); rack(226, 30); rack(4, 140); rack(228, 140);
+      R(159, 35, 36, 12, "#1a201b"); R(160, 36, 34, 5, "#3a423a"); R(160, 41, 34, 5, "#262c27");
+      R(165, 37, 3, 2, "#d83838"); R(170, 37, 3, 2, "#2f5bd8"); R(181, 37, 5, 3, "#3cff6b");
+      // the old red phone stands where the water cooler was
+      R(62, 14, 10, 20, "#1a201b"); R(63, 15, 8, 18, "#0b0f0c"); R(64, 19, 6, 3, "#c02828"); R(65, 22, 4, 4, "#901c1c"); R(66, 27, 2, 5, "#2a322b");
+    }
+    function rack(x, y){
+      R(x, y - 3, 8, 18, "#0b0f0c"); R(x + 1, y - 2, 6, 16, "#1a201b");
+      for (let i = 0; i < 4; i++) { R(x + 2, y + i * 4, 4, 1, "#2a322b"); R(x + 5, y + i * 4 + 1, 1, 1, (Math.floor(t * 2 + i + x) % 3) ? "#3cff6b" : "#0f3a18"); }
+    }
     function room(){
+      if (isMatrix()) return roomMatrix();
       for (let y = 28; y < 160; y += 8) for (let x = 0; x < 240; x += 8) R(x, y, 8, 8, ((x + y) / 8) % 2 ? "#e4d0a4" : "#dcc494");
       for (let y = 28; y < 160; y += 16) R(0, y, 240, 1, "#ccb07e");
       R(0, 0, 240, 26, "#9cc4e4"); R(0, 0, 240, 3, "#7aa4cc"); R(0, 24, 240, 4, "#58789c");
@@ -571,17 +634,24 @@ fieldset:disabled .lock{display:block}
     function plant(x, y){ R(x, y + 8, 8, 7, "#283040"); R(x + 1, y + 9, 6, 5, "#b85c38"); R(x, y, 8, 9, "#2e8a40"); R(x + 2, y - 3, 4, 5, "#48b058"); R(x + 1, y + 2, 2, 2, "#68d070"); }
     function desk(s, busy){
       const x = s.dx - 14, y = s.dtop;
+      if (isMatrix()) {
+        R(x - 1, y - 1, 30, 14, "#0b0f0c"); R(x, y, 28, 4, "#2a322b"); R(x, y + 4, 28, 8, "#1a201b"); R(x + 2, y + 6, 24, 1, "#10140f");
+        R(s.dx + 3, y - 9, 11, 9, "#0b0f0c"); R(s.dx + 4, y - 8, 9, 6, "#021a08");
+        if (busy) for (let i = 0; i < 3; i++) R(s.dx + 5, y - 7 + i * 2, 2 + ((Math.floor(t * 4) + i * 3) % 6), 1, "#3cff6b");
+        R(s.dx + 7, y - 2, 3, 2, "#0b0f0c");
+        return;
+      }
       R(x - 1, y - 1, 30, 14, "#283040"); R(x, y, 28, 4, "#d0945c"); R(x, y + 4, 28, 8, "#9c6438"); R(x + 2, y + 6, 24, 1, "#84522c");
       R(s.dx + 3, y - 9, 11, 9, "#283040"); R(s.dx + 4, y - 8, 9, 6, busy ? (Math.floor(t * 3) % 2 ? "#78e0ff" : "#58c8f8") : "#3a5878"); R(s.dx + 7, y - 2, 3, 2, "#283040");
     }
     function bubble(x, y, type){
-      const bx = x - 7, by = y - 27;
-      R(bx - 1, by - 1, 16, 12, "#283040"); R(bx, by, 14, 10, "#fff"); R(x - 1, by + 10, 3, 2, "#283040"); R(x, by + 10, 1, 1, "#fff");
-      if (type === "dots") { const n = Math.floor(t * 3) % 4; for (let i = 0; i < n; i++) R(bx + 3 + i * 3, by + 6, 2, 2, "#283040"); }
+      const bx = x - 7, by = y - 27, m = isMatrix(), edge = m ? "#3cff6b" : "#283040", fill = m ? "#021a08" : "#fff";
+      R(bx - 1, by - 1, 16, 12, edge); R(bx, by, 14, 10, fill); R(x - 1, by + 10, 3, 2, edge); R(x, by + 10, 1, 1, fill);
+      if (type === "dots") { const n = Math.floor(t * 3) % 4; for (let i = 0; i < n; i++) R(bx + 3 + i * 3, by + 6, 2, 2, m ? "#3cff6b" : "#283040"); }
       else if (type === "bang") { R(x - 1, by + 2, 2, 4, "#d83838"); R(x - 1, by + 7, 2, 1, "#d83838"); }
       else if (type === "check") { [[0,4],[1,5],[2,6],[3,5],[4,4],[5,3],[6,2]].forEach(([dx, dy]) => R(bx + 4 + dx, by + 1 + dy, 1, 2, "#30a860")); }
       else if (type === "cross") { for (let i = 0; i < 6; i++) { R(bx + 4 + i, by + 2 + i, 1, 1, "#d83838"); R(bx + 9 - i, by + 2 + i, 1, 1, "#d83838"); } }
-      else if (type === "star") { R(x - 1, by + 1, 2, 8, "#f8c838"); R(bx + 3, by + 4, 8, 2, "#f8c838"); R(x - 2, by + 3, 4, 4, "#f8c838"); }
+      else if (type === "star") { const c = m ? "#3cff6b" : "#f8c838"; R(x - 1, by + 1, 2, 8, c); R(bx + 3, by + 4, 8, 2, c); R(x - 2, by + 3, 4, 4, c); }
     }
     function drawNpc(n){
       const moving = n.path.length > 0;
@@ -630,13 +700,17 @@ fieldset:disabled .lock{display:block}
       await walk(claude, [CLAUDE_SPOT]);
     }
     function setClaude(agent){ claude.agent = agent; claude.show = !!agent; if (!agent) { claude.path = []; claude.x = CLAUDE_SPOT.x; claude.y = CLAUDE_SPOT.y; } }
-    return { spawnInterns, internsBack, setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
+    // re-dress everyone for the current skin; positions and paths don't change
+    function reskin(){ npcs.forEach(n => n.pal = palFor(n.agent)); interns.forEach(n => n.pal = Object.assign({}, n.pal, isMatrix() ? { kind: "agent", shirt: "#1e2326", tie: n.pal.tie || n.pal.shirt } : { kind: undefined, tie: undefined })); claude.pal = isMatrix() ? NEO_PAL : CLAUDE_PAL; }
+    return { reskin, spawnInterns, internsBack, setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
   })();
 
   /* ================= dialogue box ================= */
   let typer = null, typedFull = "";
+  // in the Matrix skin the narrator is the Operator and Claude is Neo
+  const showName = name => isMatrix() ? (name === "RELAY" ? "OPERATOR" : name === "Claude" ? "NEO" : name) : name;
   function say(name, role, text){
-    $("tbName").textContent = name.toUpperCase();
+    $("tbName").textContent = showName(name).toUpperCase();
     $("tbName").style.setProperty("--c", role ? `var(--${role})` : "var(--ink)");
     const box = $("tbText"); clearInterval(typer); typedFull = text; box.scrollTop = 0;
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) { box.textContent = text; return; }
@@ -648,7 +722,7 @@ fieldset:disabled .lock{display:block}
   const lastSaid = new Map();
   function onTap(a){
     const said = lastSaid.get(a);
-    if (a === CLAUDE) return say("Claude", "claude", said || "I'm Claude, your Claude Code session. Finish a run, then press SEND TO CLAUDE and I'll take it from there. My replies show up here and in the log.");
+    if (a === CLAUDE) return say("Claude", "claude", said || (isMatrix() ? "I'm Neo. Well, Claude, your Claude Code session, in a long coat. " + (inboxReady() ? "" : "Connect the Claude inbox under ⚙ so I can take your results. ") : "I'm Claude, your Claude Code session. ") + "Finish a run, then press SEND TO CLAUDE and I'll take it from there. My replies show up here and in the log.");
     say(a.name, a.role, said || `I'm ${a.name}, the ${a.title || a.role}. I run on ${PROVIDERS[a.provider]?.name || "?"} (${a.model}).`);
   }
 
@@ -884,7 +958,7 @@ fieldset:disabled .lock{display:block}
     const judges = crew.filter(a => a.role === "judge");
     // verdicts only count for the current draft: a new builder draft clears them
     const verdicts = new Map();
-    const turns = []; let approved = false, r = 1, failures = 0, calls = 0;
+    const turns = [], skipped = []; let approved = false, r = 1, failures = 0, calls = 0;
     const ask = (ag, prompt) => { calls++; return callAgent(ag, prompt, sig, ag.vision ? images : null); };
     const settle = p => p.then(text => ({ text }), err => ({ err }));
     // One teammate's turn. With delegation on and calls to spare, the first reply may be DELEGATE plus sub-tasks:
@@ -931,17 +1005,30 @@ fieldset:disabled .lock{display:block}
         // approved the moment every judge on duty this round has signed off on the latest draft (a judge who errored hasn't)
         const onDuty = crew.filter(a => a.role === "judge" && (r === 1 || a.every));
         for (let i = 0; i < crew.length; i++) {
-          const a = crew[i];
+          let a = crew[i];
           if (r > 1 && !a.every) continue;
+          // in a playbook a judge has nothing to check until the writer has produced a draft
+          if (pb && a.role === "judge" && !turns.some(t => t.role === "builder")) continue;
           if (sig.aborted) throw new DOMException("Stopped", "AbortError");
           const npc = scene.npc(i);
           status.textContent = "ROUND " + r + "/" + rounds + " · " + a.name.toUpperCase();
-          const res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
+          let res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
+          // a playbook writer whose model fails gets one more try on another connected provider
+          if (res.err && res.err.name !== "AbortError" && pb && a.role === "builder") {
+            const alt = ["groq", "gemini", "mistral", "openrouter"].find(p => p !== a.provider && hasKey(p));
+            if (alt) {
+              const why = isNetErr(res.err) ? "couldn't reach " + PROVIDERS[a.provider].name : res.err.message;
+              skipped.push({ name: a.name, msg: why });
+              logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, why + " Trying " + PROVIDERS[alt].name + " instead.");
+              crew[i] = a = Object.assign({}, a, { provider: alt, model: PROVIDERS[alt].def });
+              res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
+            }
+          }
           if (res.err) {
             if (res.err.name === "AbortError") throw res.err;
             failures++;
             const msg = isNetErr(res.err) ? a.name + " couldn't reach " + PROVIDERS[a.provider].name + ". Skipped this turn." : res.err.message + " Skipped this turn.";
-            npc.bubble = "cross"; say(a.name, a.role, msg);
+            npc.bubble = "cross"; say(a.name, a.role, msg); skipped.push({ name: a.name, msg });
             const lt = logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, msg);
             if (res.help?.length) lt.art.appendChild(internDetails(res.help));
           } else {
@@ -963,13 +1050,16 @@ fieldset:disabled .lock{display:block}
         }
         if (approved) break;
       }
-      const draft = [...turns].reverse().find(t => t.role === "builder") || turns[turns.length - 1];
-      if (!draft) throw new Error("No teammate produced a reply. Check the log.");
+      const draft = [...turns].reverse().find(t => t.role === "builder") || (crew.some(a => a.role === "builder") ? null : turns[turns.length - 1]);
+      // never pass a judge's checklist off as the deliverable: with no draft there is nothing to send
+      if (!draft) throw new Error(crew.some(a => a.role === "builder")
+        ? "No draft: the writer failed every time. " + (skipped.length ? "Last error: " + skipped[skipped.length - 1].msg : "Check the log.")
+        : "No teammate produced a reply. Check the log.");
       const done = Math.min(r, rounds);
       const verdictLine = approved ? "Approved by " + judges.filter(j => verdicts.get(j)).map(j => j.name).join(", ") + " in round " + done + "."
         : judges.length ? "Not approved: hit the " + rounds + "-round limit." : "No judges on the team.";
       const lastJudge = approved ? null : [...turns].reverse().find(t => t.role === "judge");
-      Object.assign(run, { status: approved ? "approved" : "done", calls, verdictLine, approved, round: done,
+      Object.assign(run, { status: approved ? "approved" : "done", calls, verdictLine, approved, round: done, skipped,
         final: { name: draft.name, text: draft.text }, lastJudge: lastJudge ? { name: lastJudge.name, text: lastJudge.text } : null });
       saveRun(run);
       // a job's result goes straight back to Claude; anything else waits for the SEND TO CLAUDE button
@@ -980,7 +1070,7 @@ fieldset:disabled .lock{display:block}
       status.className = "status ok";
       status.textContent = (approved ? "QUEST COMPLETE" : "DONE") + " · " + calls + " CALLS" + (failures ? " · " + failures + " TURN" + (failures > 1 ? "S" : "") + " SKIPPED" : "");
     } catch (err) {
-      run.status = err.name === "AbortError" ? "stopped" : "failed"; run.turns = turns.slice(); run.calls = calls;
+      run.status = err.name === "AbortError" ? "stopped" : "failed"; run.turns = turns.slice(); run.calls = calls; run.skipped = skipped;
       if (turns.length) saveRun(run);
       status.className = "status err";
       status.textContent = err.name === "AbortError" ? "STOPPED" : err.message;
@@ -1002,7 +1092,7 @@ fieldset:disabled .lock{display:block}
     fin.art.appendChild(btn);
     const job = run.jobId ? jobs.find(j => j.id === run.jobId) : null;
     fin.art.appendChild(handoffControls({ task: run.task, draft: run.final, crew: run.crew, verdictLine: run.verdictLine, lastJudge: run.lastJudge,
-      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
+      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent, skipped: run.skipped }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
     return fin;
   }
   // the last 20 runs, each step saved as it happens, so a locked phone or a closed app doesn't lose the work
@@ -1110,7 +1200,7 @@ fieldset:disabled .lock{display:block}
     const chip = el("span", { className: "chip" });
     const paint = () => { chip.className = "chip" + (inbox.ok === true ? " ok" : inbox.ok === false ? " err" : ""); chip.textContent = inbox.ok === true ? "WORKING" : inbox.ok === false ? "FAILED" : inbox.token ? "UNTESTED" : "NOT SET"; };
     paint();
-    const reset = () => { inbox.ok = null; inbox.since = ""; inbox.seen = []; saveInbox(); paint(); scene.setClaude(null); };
+    const reset = () => { inbox.ok = null; inbox.since = ""; inbox.seen = []; saveInbox(); paint(); showClaude(); };
     const repo = el("input", { className: "mono", value: inbox.repo, placeholder: "owner/repo", autocapitalize: "off", spellcheck: false, id: "inbox-repo" });
     repo.setAttribute("aria-label", "Inbox repository");
     repo.addEventListener("change", () => { inbox.repo = repo.value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/+$/, ""); reset(); });
@@ -1138,10 +1228,10 @@ fieldset:disabled .lock{display:block}
           inbox.since = p.updated_at;
           inbox.seen = (await ghFetch(gh("/issues/" + inbox.pr + "/comments?per_page=100&since=" + encodeURIComponent(inbox.since)))).map(c => c.id);
         }
-        inbox.login = login; inbox.ok = true; saveInbox(); paint(); scene.setClaude(CLAUDE); renderJobs();
+        inbox.login = login; inbox.ok = true; saveInbox(); paint(); showClaude(); renderJobs();
         status.className = "status ok"; status.textContent = "Connected to “" + p.title + "” as " + login + ".";
       } catch (e) {
-        inbox.ok = false; saveInbox(); paint(); scene.setClaude(null);
+        inbox.ok = false; saveInbox(); paint(); showClaude();
         status.className = "status err"; status.textContent = isNetErr(e) ? "Couldn't reach GitHub. Check your connection." : e.message;
       }
     };
@@ -1157,7 +1247,7 @@ fieldset:disabled .lock{display:block}
   // the longest run of backticks in the text, plus one, so the deliverable can't break out of its code fence
   const fenceFor = t => "`".repeat(Math.max(3, ...(String(t).match(/`+/g) || []).map(m => m.length + 1)));
   const quote = t => String(t).split("\n").map(l => "> " + l).join("\n");
-  function handoffBody({ task, draft, crew, verdictLine, lastJudge, playbook, job }, note){
+  function handoffBody({ task, draft, crew, verdictLine, lastJudge, playbook, job, skipped }, note){
     const f = fenceFor(draft.text);
     const parts = [
       INBOX_MARK,
@@ -1167,6 +1257,7 @@ fieldset:disabled .lock{display:block}
       "**Task**\n" + quote(task),
       note ? "**Note for Claude**\n" + quote(note) : "",
       "**Outcome:** " + verdictLine,
+      skipped?.length ? "**Problems during the run**\n" + skipped.map(x => "- " + x.name + ": " + x.msg).join("\n") : "",
       "**Team:** " + crew.map(a => a.name + " (" + a.role + ", " + PROVIDERS[a.provider].name + " " + a.model + ")").join("; "),
       "**Final deliverable** (by " + draft.name + ")\n" + f + "text\n" + clip(draft.text) + "\n" + f,
       lastJudge ? "**Last judge feedback** (" + lastJudge.name + ")\n" + quote(clip(lastJudge.text)) : ""
@@ -1226,6 +1317,20 @@ fieldset:disabled .lock{display:block}
   setInterval(pollInbox, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollInbox(); });
 
+  /* ================= skins ================= */
+  function showClaude(){ scene.setClaude(inboxReady() || isMatrix() ? CLAUDE : null); }
+  function applySkin(){
+    document.documentElement.dataset.skin = skin;
+    document.querySelector(".brand").innerHTML = isMatrix() ? "AI RELAY <b>MATRIX</b>" : "AI RELAY <b>OFFICE</b>";
+    document.querySelector('meta[name="theme-color"]').content = isMatrix() ? "#020a04" : "#3f3b8f";
+    $("skin").value = skin;
+    scene.reskin(); showClaude(); renderTeam();
+  }
+  $("skin").addEventListener("change", () => {
+    skin = $("skin").value === "matrix" ? "matrix" : "office"; store.set("skin", skin); applySkin();
+    say("RELAY", null, isMatrix() ? "Welcome to the real world. Same team, same jobs. Neo is here when you need Claude." : "Back to the office!");
+  });
+
   /* ================= boot ================= */
   scene.sync(team);
   renderConns(); saveConn(); renderTeam(); saveTeam();
@@ -1236,7 +1341,8 @@ fieldset:disabled .lock{display:block}
   // ask the browser not to evict saved keys under storage pressure (granted at its discretion; harmless if not)
   navigator.storage?.persist?.().catch(() => {});
   onPlaybook(); renderJobs(); renderHistory(); store.set("runs", runs);
-  if (inboxReady()) { scene.setClaude(CLAUDE); pollInbox(); }
+  applySkin();
+  if (inboxReady()) pollInbox();
 })();
 </script>
 </body>

@@ -51,7 +51,11 @@ If a playbook's provider has no key, that teammate moves to one you've connected
 
 **History** keeps your last 20 runs, saved step by step, so locking the phone or closing the app doesn't lose work. If the phone locks during a model call, the app retries that call once when you come back.
 
-**⚙ (top right)** holds your keys (Connections) and the custom team (Team).
+**⚙ (top right)** holds the skin, your keys (Connections) and the custom team (Team).
+
+**Skins:** *Office* (classic) or *Matrix*: same layout, green code rain, agents in suits and sunglasses (their tie shows their role), and Neo, which is Claude, always in the room. The narrator becomes the Operator, and A/B are the red and blue pills.
+
+If a playbook's writer fails (wrong model name, rate limit), it tries once more on another connected provider. Judges wait until there's a draft, and a run with no draft sends nothing to Claude.
 
 ## Interns (teammates delegating work)
 
