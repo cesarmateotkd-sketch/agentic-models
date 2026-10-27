@@ -122,6 +122,13 @@ a{color:var(--helper)}
 .turn .copy{margin-top:10px}
 .handoff{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:2px dashed var(--win-inner);padding-top:10px}
 .handoff textarea{min-height:56px;font-size:16px}
+details.interns{margin-top:10px;border-top:2px dashed var(--win-inner);padding-top:8px}
+details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer}
+.intern-note{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-left:8px;border-left:3px solid var(--win-inner)}
+.intern-note b{font:8px/1.6 var(--px);color:var(--ink);font-weight:400;overflow-wrap:anywhere}
+.intern-note pre{font-size:15px}
+.subbox{border:2px dashed var(--win-inner);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:10px}
+.subbox h3{margin:0;font:9px/1.5 var(--px)}
 #inbox-pr{flex:0 0 76px}
 .empty{color:var(--muted);font-size:15px;text-align:center;padding:8px}
 fieldset{border:0;margin:0;padding:0;min-width:0}
@@ -166,6 +173,7 @@ fieldset:disabled .lock{display:block}
       <div class="lock">LOCKED WHILE THE TEAM IS WORKING. PRESS B TO STOP.</div>
       <div class="legend"><span class="lane helper">HELPER adds input</span><span class="lane builder">BUILDER writes</span><span class="lane judge">JUDGE approves</span></div>
       <div class="stack" id="agents" style="margin-top:0"></div>
+      <div class="subbox" id="internBox"></div>
       <label>Hire a teammate <small>Each one is the best free model we found for that job.</small>
         <select id="preset"></select>
       </label>
@@ -311,13 +319,34 @@ fieldset:disabled .lock{display:block}
   ];
   const fromPreset = (p, n) => {
     const pid = p.provider || Object.keys(PROVIDERS).find(k => conn[k].key) || "openrouter";
-    return { name: p.name || "Temp " + n, title: p.title, role: p.role, provider: pid, model: p.model || PROVIDERS[pid].def, every: p.every, prompt: p.prompt, hair: (p.hair + n) % HAIRS.length };
+    return { name: p.name || "Temp " + n, title: p.title, role: p.role, provider: pid, model: p.model || PROVIDERS[pid].def, every: p.every, prompt: p.prompt, hair: (p.hair + n) % HAIRS.length, delegate: pid !== "openrouter" };
   };
   const HAIRS = ["#5a3a22", "#f8d048", "#e05838", "#283040", "#a868d8", "#e8e8e8", "#3898f8", "#e888b8"];
   const ROLE_SHIRT = { builder: "#f0a030", judge: "#d84890", helper: "#4878e8" };
   const DEFAULT_TEAM = () => [0, 1, 2].map(i => Object.assign(fromPreset(PRESETS[i], 0), { hair: PRESETS[i].hair }));
   let team = store.get("team4", null) || DEFAULT_TEAM();
-  team.forEach((a, i) => { if (a.hair == null) a.hair = i % HAIRS.length; if (!a.title) a.title = a.role; });
+  // delegation is off for OpenRouter teammates by default: its free models allow only about 50 requests a day
+  team.forEach((a, i) => { if (a.hair == null) a.hair = i % HAIRS.length; if (!a.title) a.title = a.role; if (a.delegate == null) a.delegate = a.provider !== "openrouter"; });
+  const internCfg = Object.assign({ provider: "groq", model: "openai/gpt-oss-120b", budget: 30 }, store.get("interns", {}));
+  const saveInterns = () => store.set("interns", internCfg);
+  function renderInterns(){
+    const box = $("internBox"); box.textContent = "";
+    const prov = el("select", { id: "int-prov" });
+    for (const pid in PROVIDERS) prov.appendChild(el("option", { value: pid, textContent: PROVIDERS[pid].name + (conn[pid].key ? "" : " (no key)"), selected: internCfg.provider === pid }));
+    prov.addEventListener("change", () => { internCfg.provider = prov.value; internCfg.model = PROVIDERS[prov.value].def; saveInterns(); renderInterns(); });
+    const model = el("input", { className: "mono", value: internCfg.model, id: "int-model", autocapitalize: "off", spellcheck: false, placeholder: "model name" });
+    model.setAttribute("list", "models-" + internCfg.provider);
+    model.addEventListener("change", () => { internCfg.model = model.value.trim(); saveInterns(); });
+    const budget = el("select", { id: "int-budget" });
+    [10, 20, 30, 50, 80].forEach(n => budget.appendChild(el("option", { value: n, textContent: n, selected: internCfg.budget === n })));
+    budget.addEventListener("change", () => { internCfg.budget = +budget.value; saveInterns(); });
+    box.append(
+      el("h3", { textContent: "Interns" }),
+      el("div", { className: "small", textContent: "Teammates with “Can hand work to interns” may split their turn into up to 3 sub-tasks. Interns run at the same time on the model below, then the teammate writes its turn with their notes. If that provider has no key, interns use the teammate's own model." }),
+      el("div", { className: "row" }, el("label", {}, "Interns use", prov), el("label", {}, "Max calls per run", budget)),
+      el("label", {}, "Intern model", model),
+      el("div", { className: "small", textContent: "Past the call limit, teammates stop delegating and answer on their own." }));
+  }
   const saveTeam = () => { store.set("team4", team); $("teamCount").textContent = team.length + " ON STAFF"; scene.sync(team); };
   PRESETS.forEach((p, i) => $("preset").appendChild(el("option", { value: i, textContent: p.label })));
 
@@ -351,6 +380,8 @@ fieldset:disabled .lock{display:block}
       model.addEventListener("focus", () => { if (!modelLists[a.provider] && conn[a.provider].key) fetchModels(a.provider).catch(() => {}); }, { once: true });
       const every = el("input", { type: "checkbox", checked: a.every, id: "ae-" + i });
       every.addEventListener("change", () => { a.every = every.checked; saveTeam(); });
+      const deleg = el("input", { type: "checkbox", checked: !!a.delegate, id: "ad-" + i });
+      deleg.addEventListener("change", () => { a.delegate = deleg.checked; saveTeam(); });
       const prompt = el("textarea", { value: a.prompt, id: "ai-" + i });
       prompt.addEventListener("change", () => { a.prompt = prompt.value; saveTeam(); });
 
@@ -359,10 +390,12 @@ fieldset:disabled .lock{display:block}
         el("div", { className: "row" }, el("label", {}, "Role", role), el("label", {}, "Provider", prov)),
         el("label", {}, "Model", model),
         el("label", {}, "Instructions", prompt),
-        el("label", { className: "check" }, every, "Speaks every round")
+        el("label", { className: "check" }, every, "Speaks every round"),
+        el("label", { className: "check" }, deleg, "Can hand work to interns")
       );
       box.appendChild(card);
     });
+    renderInterns();
   }
   $("addAgent").onclick = () => { team.push(fromPreset(PRESETS[+$("preset").value], team.length)); saveTeam(); renderTeam(); say("RELAY", null, team[team.length - 1].name + " joined the team!"); };
   $("resetTeam").onclick = () => { team = DEFAULT_TEAM(); saveTeam(); renderTeam(); };
@@ -385,16 +418,18 @@ fieldset:disabled .lock{display:block}
     "..OPPOOPPO.."
   ];
   const FEET = { idle: "..OBBO.OBBO.", walkA: ".OBBO..OBBO.", walkB: "..OBBO..OBBO" };
+  const MINI = [".OOOOO.", "OHHHHHO", "OSESESO", "OSSSSSO", ".OSSSO.", "OCCCCCO", "OCDDDCO", ".OPOPO."];
+  const MINI_FEET = { idle: ".BB.BB.", walkA: "BB..BB.", walkB: ".BB..BB" };
   const shade = (hex, f) => "#" + [1, 3, 5].map(i => Math.max(0, Math.min(255, Math.round(parseInt(hex.substr(i, 2), 16) * f))).toString(16).padStart(2, "0")).join("");
   const palFor = a => ({ hair: HAIRS[a.hair % HAIRS.length], shirt: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper });
   const spriteCache = {};
-  function sprite(pal, frame){
-    const k = pal.hair + pal.shirt + frame;
+  function sprite(pal, frame, mini){
+    const k = pal.hair + pal.shirt + frame + (mini ? "m" : "");
     if (spriteCache[k]) return spriteCache[k];
-    const c = document.createElement("canvas"); c.width = 12; c.height = 15;
+    const c = document.createElement("canvas"); c.width = mini ? 7 : 12; c.height = mini ? 9 : 15;
     const x = c.getContext("2d");
     const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: shade(pal.shirt, .7), P: "#485878", B: "#283040" };
-    [...BODY, FEET[frame]].forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
+    (mini ? [...MINI, MINI_FEET[frame]] : [...BODY, FEET[frame]]).forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
     return spriteCache[k] = c;
   }
 
@@ -432,7 +467,10 @@ fieldset:disabled .lock{display:block}
     }
     const CLAUDE_SPOT = { x: 82, y: 46 }, CLAUDE_BOARD = { x: 104, y: 46 };
     const claude = { x: CLAUDE_SPOT.x, y: CLAUDE_SPOT.y, path: [], resolve: null, bubble: null, away: false, idx: 99, home: { desk: false }, pal: { hair: "#efe6d6", shirt: "#d97757" }, agent: null, show: false };
-    const everyone = () => claude.show ? npcs.concat(claude) : npcs;
+    // interns work at a side table right of the whiteboard: a part of the floor no desk or aisle uses
+    const INTERN_SPOTS = [{ x: 166, y: 57 }, { x: 178, y: 59 }, { x: 190, y: 57 }];
+    let interns = [];
+    const everyone = () => (claude.show ? npcs.concat(claude) : npcs).concat(interns);
     function finishWalks(){ everyone().forEach(n => { if (!n.path.length) return; const p = n.path[n.path.length - 1]; n.x = p.x; n.y = p.y; n.path = []; if (n.resolve) { const r = n.resolve; n.resolve = null; r(); } }); }
     document.addEventListener("visibilitychange", () => { if (document.hidden) finishWalks(); });
     // Paths only use the aisle above each desk row and the clear column at x=120, so nobody crosses a desk.
@@ -447,7 +485,18 @@ fieldset:disabled .lock{display:block}
       const p = walk(n, [{ x: BOARD.x, y: s.corridor }, { x: s.x, y: s.corridor }, { x: s.x, y: s.y }]);
       return p.then(() => { if (!n.path.length && n.x === s.x && n.y === s.y) n.away = false; });
     }
-    function allHome(){ npcs.forEach(n => { n.bubble = null; if (n.away || n.path.length) { n.path = []; n.x = n.home.x; n.y = n.home.y; n.away = false; n.resolve?.(); n.resolve = null; } }); }
+    function spawnInterns(owner, agents){
+      interns = agents.map((ag, k) => ({ x: owner.x + (k - 1) * 4, y: owner.y + 3, path: [], resolve: null, bubble: "dots", away: true, mini: true, idx: 50 + k,
+        home: { desk: false }, agent: ag, pal: { hair: HAIRS[(owner.agent.hair + k + 1) % HAIRS.length], shirt: owner.pal.shirt } }));
+      return { npcs: interns.slice(), arrived: Promise.all(interns.map((n, k) => walk(n, [{ x: n.x, y: 56 }, { x: INTERN_SPOTS[k].x, y: 56 }, INTERN_SPOTS[k]]))) };
+    }
+    async function internsBack(){
+      const going = interns;
+      await Promise.all(going.map(n => walk(n, [{ x: n.x, y: 56 }, { x: 128, y: 56 }, { x: 128, y: 50 }])));
+      if (interns === going) interns = [];
+    }
+    function clearInterns(){ const old = interns; interns = []; old.forEach(n => { n.path = []; if (n.resolve) { const r = n.resolve; n.resolve = null; r(); } }); }
+    function allHome(){ clearInterns(); npcs.forEach(n => { n.bubble = null; if (n.away || n.path.length) { n.path = []; n.x = n.home.x; n.y = n.home.y; n.away = false; n.resolve?.(); n.resolve = null; } }); }
     function celebrate(){
       npcs.forEach(n => n.bubble = "star");
       if (reduce) return;
@@ -475,6 +524,8 @@ fieldset:disabled .lock{display:block}
       const a = t * .5; R(167 + Math.round(Math.cos(a) * 3), 10 + Math.round(Math.sin(a) * 3), 1, 1, "#d83838");
       R(100, 32, 40, 18, "#b84848"); R(102, 34, 36, 14, "#d86060"); R(104, 36, 32, 10, "#e88080");
       plant(6, 30); plant(226, 30); plant(4, 140); plant(228, 140);
+      R(159, 35, 36, 12, "#283040"); R(160, 36, 34, 5, "#d0945c"); R(160, 41, 34, 5, "#9c6438");
+      R(165, 37, 6, 3, "#fff"); R(181, 37, 5, 3, "#fff"); R(175, 36, 3, 3, "#d84890");
       R(62, 14, 10, 20, "#283040"); R(63, 15, 8, 8, "#88c8f0"); R(63, 23, 8, 10, "#e8e8e8"); R(64, 16, 2, 4, "#c8ecff");
     }
     function plant(x, y){ R(x, y + 8, 8, 7, "#283040"); R(x + 1, y + 9, 6, 5, "#b85c38"); R(x, y, 8, 9, "#2e8a40"); R(x + 2, y - 3, 4, 5, "#48b058"); R(x + 1, y + 2, 2, 2, "#68d070"); }
@@ -498,6 +549,7 @@ fieldset:disabled .lock{display:block}
       const bob = moving ? (Math.floor(t * 8) % 2) : (!n.away && !reduce && Math.sin(t * 3 + n.idx * 1.7) > .7 ? 1 : 0);
       const x = Math.round(n.x), y = Math.round(n.y);
       if (n.away) R(x - 4, y - 1, 8, 2, "rgba(40,48,64,.25)");
+      if (n.mini) { ctx.drawImage(sprite(n.pal, frame, true), x - 3, y - 9 + bob); if (n.bubble) bubble(x, y + 6 + bob, n.bubble); return; }
       ctx.drawImage(sprite(n.pal, frame), x - 6, y - 15 + bob);
       if (n.bubble) bubble(x, y + bob, n.bubble);
     }
@@ -538,7 +590,7 @@ fieldset:disabled .lock{display:block}
       await walk(claude, [CLAUDE_SPOT]);
     }
     function setClaude(agent){ claude.agent = agent; claude.show = !!agent; if (!agent) { claude.path = []; claude.x = CLAUDE_SPOT.x; claude.y = CLAUDE_SPOT.y; } }
-    return { setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
+    return { spawnInterns, internsBack, setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
   })();
 
   /* ================= dialogue box ================= */
@@ -631,6 +683,32 @@ fieldset:disabled .lock{display:block}
     return "TASK:\n" + task + (ctx ? "\n\nTEAM SO FAR:\n" + ctx : "") + "\n\nYOUR TURN (" + a.name + "): " + ask;
   }
 
+  /* ================= interns (one level of delegation) ================= */
+  const INTERN_PROMPT = "Do only the sub-task you're given, for the teammate who asked. Be concise and concrete. No preamble.";
+  const delegateOffer = n => "\n\nOPTIONAL: before your turn you can get help from up to " + n + " intern" + (n > 1 ? "s" : "") +
+    ". They work at the same time and see only the task, the team notes above and the one instruction you give each. Delegate only when separate pieces of work would clearly make your turn better." +
+    " To delegate, reply with exactly this and nothing else:\nDELEGATE\n{\"subtasks\": [\"instruction for intern 1\", \"instruction for intern 2\"]}\nOtherwise, give your turn now as usual.";
+  // returns null when the reply is a normal turn, otherwise the list of sub-tasks (possibly empty)
+  function parseDelegation(text, max){
+    if (!/^\W*DELEGATE\b/i.test(text.trim().split("\n")[0])) return null;
+    let subs = [];
+    try { const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)); subs = j.subtasks || j.tasks || []; } catch {}
+    if (!Array.isArray(subs) || !subs.length) subs = text.trim().split("\n").slice(1).map(l => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(l => l && !/^[{}\[\]"]/.test(l));
+    return subs.filter(x => typeof x === "string" && x.trim()).map(x => x.trim().slice(0, 500)).slice(0, max);
+  }
+  function internAgent(a, k){
+    const c = internCfg, ready = c.model && (c.provider === "custom" ? conn.custom.base : conn[c.provider]?.key);
+    return { name: a.name + "'s intern " + (k + 1), title: "Intern", role: "intern", provider: ready ? c.provider : a.provider, model: ready ? c.model : a.model, prompt: INTERN_PROMPT, hair: 0 };
+  }
+  function internDetails(help){
+    const d = el("details", { className: "interns" }, el("summary", { textContent: help.length + " INTERN" + (help.length > 1 ? "S" : "") + " HELPED" }));
+    help.forEach(h => d.appendChild(el("div", { className: "intern-note" },
+      el("b", { textContent: h.who.name + " · " + PROVIDERS[h.who.provider].name + " · " + h.who.model }),
+      el("div", { className: "small", textContent: "Sub-task: " + h.sub }),
+      el("pre", { textContent: h.ok ? h.text : "Failed: " + h.err.message }))));
+    return d;
+  }
+
   function logTurn(cls, title, sub, text){
     $("track").querySelector(".empty")?.remove();
     const pre = el("pre", { textContent: text });
@@ -664,7 +742,40 @@ fieldset:disabled .lock{display:block}
     const judges = crew.filter(a => a.role === "judge");
     // verdicts only count for the current draft: a new builder draft clears them
     const verdicts = new Map();
-    const turns = []; let approved = false, r = 1, failures = 0;
+    const turns = []; let approved = false, r = 1, failures = 0, calls = 0;
+    const ask = (ag, prompt) => { calls++; return callAgent(ag, prompt, sig); };
+    const settle = p => p.then(text => ({ text }), err => ({ err }));
+    // One teammate's turn. With delegation on and calls to spare, the first reply may be DELEGATE plus sub-tasks:
+    // interns run them in parallel (interns never delegate), then the teammate answers again with their notes.
+    async function takeTurn(a, npc, base){
+      const room = a.delegate ? Math.min(3, internCfg.budget - calls - 2) : 0;
+      const first = settle(ask(a, room > 0 ? base + delegateOffer(room) : base));
+      await scene.toBoard(npc);
+      npc.bubble = "dots";
+      const res = await first;
+      if (res.err || room <= 0) return res;
+      const subs = parseDelegation(res.text, room);
+      if (!subs) return res;
+      let help = [], notes = "";
+      if (subs.length) {
+        $("status").textContent += " + " + subs.length + " INTERN" + (subs.length > 1 ? "S" : "");
+        say(a.name, a.role, "Handing " + subs.length + " sub-task" + (subs.length > 1 ? "s" : "") + " to interns:\n" + subs.map(x => "• " + x).join("\n"));
+        npc.bubble = "bang";
+        const helpers = subs.map((x, k) => internAgent(a, k));
+        const team2 = scene.spawnInterns(npc, helpers);
+        const context = base.replace(/\n\nYOUR TURN \([\s\S]*$/, "");
+        help = await Promise.all(helpers.map((ag, k) => settle(ask(ag, context + "\n\nYOU ARE AN INTERN helping " + a.name + " (" + a.role + "). Your sub-task: " + subs[k]))
+          .then(o => { team2.npcs[k].bubble = o.err ? "cross" : "bang"; if (o.text) lastSaid.set(ag, o.text); return { who: ag, sub: subs[k], ok: !o.err, text: o.text, err: o.err }; })));
+        if (help.some(h => h.err?.name === "AbortError")) throw new DOMException("Stopped", "AbortError");
+        await team2.arrived; await sleep(700);
+        await scene.internsBack();
+        npc.bubble = "dots";
+        notes = "\n\nYOUR INTERNS' NOTES (use what helps; the turn is still yours):\n" + help.map((h, k) => "### Intern " + (k + 1) + ": " + h.sub + "\n" + (h.ok ? clip(h.text) : "(failed: " + h.err.message + ")")).join("\n\n");
+      }
+      const fin = await settle(ask(a, base + notes + "\n\nNow give your turn. Do not delegate."));
+      fin.help = help;
+      return fin;
+    }
     say("RELAY", null, "New task on the board! Everyone, places.");
     try {
       for (; r <= rounds; r++) {
@@ -677,15 +788,14 @@ fieldset:disabled .lock{display:block}
           if (sig.aborted) throw new DOMException("Stopped", "AbortError");
           const npc = scene.npc(i);
           status.textContent = "ROUND " + r + "/" + rounds + " · " + a.name.toUpperCase();
-          const call = callAgent(a, buildPrompt(a, task, turns, r), sig).then(text => ({ text }), err => ({ err }));
-          await scene.toBoard(npc);
-          npc.bubble = "dots";
-          const res = await call;
+          const res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
           if (res.err) {
             if (res.err.name === "AbortError") throw res.err;
             failures++;
             const msg = isNetErr(res.err) ? a.name + " couldn't reach " + PROVIDERS[a.provider].name + ". Skipped this turn." : res.err.message + " Skipped this turn.";
-            npc.bubble = "cross"; say(a.name, a.role, msg); logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, msg);
+            npc.bubble = "cross"; say(a.name, a.role, msg);
+            const lt = logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, msg);
+            if (res.help?.length) lt.art.appendChild(internDetails(res.help));
           } else {
             const text = res.text;
             turns.push({ name: a.name, role: a.role, round: r, text }); lastSaid.set(a, text);
@@ -695,7 +805,8 @@ fieldset:disabled .lock{display:block}
             npc.bubble = a.role === "judge" ? (ok ? "check" : "cross") : "bang";
             scene.mark(ROLE_SHIRT[a.role]);
             say(a.name, a.role, text);
-            logTurn(a.role, a.name + " · " + (a.title || a.role) + " · R" + r, PROVIDERS[a.provider].name + " · " + a.model, text);
+            const lt = logTurn(a.role, a.name + " · " + (a.title || a.role) + " · R" + r, PROVIDERS[a.provider].name + " · " + a.model, text);
+            if (res.help?.length) lt.art.appendChild(internDetails(res.help));
           }
           await sleep(900);
           npc.bubble = null; scene.toDesk(npc);
@@ -720,7 +831,7 @@ fieldset:disabled .lock{display:block}
       if (approved) { scene.celebrate(); say("RELAY", null, "Every judge signed off. Quest complete! The final version is at the bottom of the log."); }
       else say("RELAY", null, judges.length ? "Out of rounds. The last draft is in the log as the final." : "Done! The final version is at the bottom of the log.");
       status.className = "status ok";
-      status.textContent = (approved ? "QUEST COMPLETE" : "DONE") + (failures ? " · " + failures + " TURN" + (failures > 1 ? "S" : "") + " SKIPPED" : "");
+      status.textContent = (approved ? "QUEST COMPLETE" : "DONE") + " · " + calls + " CALLS" + (failures ? " · " + failures + " TURN" + (failures > 1 ? "S" : "") + " SKIPPED" : "");
     } catch (err) {
       status.className = "status err";
       status.textContent = err.name === "AbortError" ? "STOPPED" : err.message;

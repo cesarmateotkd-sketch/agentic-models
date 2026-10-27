@@ -33,6 +33,15 @@ After pasting a key, tap **TEST**. "WORKING" means the app could list that provi
 
 It opens full screen with its own pixel icon. The site root (`index.html`) redirects to `AgentOffice.html`.
 
+## Interns (teammates delegating work)
+
+A teammate with **Can hand work to interns** checked may split its turn into up to 3 sub-tasks. Small intern sprites run to the side table next to the whiteboard and work at the same time. The teammate then writes its turn using their notes, which appear in the log under "INTERNS HELPED". Interns can't hire interns of their own.
+
+- **Interns use** (under Team → Interns) sets the interns' provider and model. The default is Groq GPT-OSS 120B, which is fast and has generous free limits. If that provider has no key, interns use the teammate's own model.
+- **Max calls per run** (default 30) caps how much delegation a run can do. Past it, teammates answer on their own.
+- Delegation starts off for OpenRouter teammates, because its free models allow only about 50 requests a day.
+- Each delegated turn costs 2 calls for the teammate plus 1 per intern. The status line shows the total calls when a run ends.
+
 ## Sending results to Claude Code (Claude inbox)
 
 The app can hand a finished run to a Claude Code session. Each handoff goes in as a comment on a GitHub pull request the session is subscribed to: [PR #1, "Relay inbox (do not merge)"](https://github.com/cesarmateotkd-sketch/agentic-models/pull/1). Claude does the work and replies on the PR. The app checks for replies every 20 seconds while it's open, and the CLAUDE NPC walks to the board to deliver each one.
