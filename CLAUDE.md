@@ -33,9 +33,15 @@ Post a comment on PR #1 (as the owner's account, which is how the GitHub tools p
 
 - `playbook` is one of `pins`, `outline`, `factcheck`, `compliance`, `visual`, `critique`, `appchange`, or empty for the owner's custom team.
 - `id` must be new; a repeated id is ignored. Put all the context the team needs in `task` (data, links, notes).
-- For `critique`, include image links in `task`. Use images on GitHub Pages (for example `review/` in this repo), because the app downloads them from the browser and GitHub Pages allows that.
+- For `critique`, include image links in `task`. Use images from this repo (the `review-images` branch via raw.githubusercontent.com, or GitHub Pages), because the app downloads them in the browser and both allow that.
 - When the owner runs a job, the result comes back automatically as a handoff with a `**Job:**` line naming the id.
 
 ### "Change the app" handoffs
-A handoff whose `**Playbook:**` line says "Change the app" is a change request for this app, written by the free team from the owner's idea and sent automatically. Treat it as the owner asking for that change: build it on a `claude/*` branch, run the tests (including the upgrade test), reply on PR #1 with what changed and how to check it (commit screenshots under `review/` and link them via GitHub Pages if useful), and merge to `main` only after the owner approves. If the request conflicts with the hard rules above, say so in the reply instead of building it.
+A handoff whose `**Playbook:**` line says "Change the app" is a change request for this app, written by the free team from the owner's idea and sent automatically. Treat it as the owner asking for that change: build it on a `claude/*` branch, run the tests (including the upgrade test), reply on PR #1 with what changed and how to check it, with screenshots (see below), and merge to `main` only after the owner approves. If the request conflicts with the hard rules above, say so in the reply instead of building it.
+
+### Screenshots in replies
+The app shows images in Claude's replies when they're markdown images (`![caption](url)`) hosted in this repo: `https://raw.githubusercontent.com/cesarmateotkd-sketch/agentic-models/...` or the GitHub Pages site. Other hosts stay plain text.
+- Commit screenshots to the `review-images` branch (an orphan branch, images only, never merged), under `shots/<topic>/` with new file names each time (raw files are cached for a few minutes). Link them as `https://raw.githubusercontent.com/cesarmateotkd-sketch/agentic-models/review-images/shots/<topic>/<file>.png`.
+- Keep them phone-sized (about 390px wide at 2x) and few per reply.
+- The same raw links work for `critique` jobs, because raw files allow browser downloads.
 

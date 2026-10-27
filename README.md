@@ -79,7 +79,7 @@ The app can hand a finished run to a Claude Code session. Each handoff goes in a
 4. Pick an expiry (90 days is fine), generate, and copy the token.
 5. In the app, open **Connections → Claude inbox**. Repo and PR are prefilled. Paste the token and tap **TEST**.
 
-**Use it:** after a run, type an optional note for Claude under the final result and tap **SEND TO CLAUDE**.
+**Use it:** after a run, type an optional note for Claude under the final result and tap **SEND TO CLAUDE**. Claude's replies can include screenshots (from this repo only), shown in the log; tap one to see it full size.
 
 **Connecting a new Claude Code session:** only one session listens at a time, and sessions end after a while. Start a new one and tell it: *"subscribe to the relay inbox PR in cesarmateotkd-sketch/agentic-models"*.
 

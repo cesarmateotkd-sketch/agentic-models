@@ -120,6 +120,10 @@ a{color:var(--helper)}
 .turn h3 span{font:13px var(--body);color:var(--muted);overflow-wrap:anywhere}
 .turn pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--body)}
 .turn .copy{margin-top:10px}
+.shots{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.shots a{display:block;text-decoration:none}
+.shots img{display:block;width:100%;height:auto;border:2px solid var(--win-edge);border-radius:4px;background:var(--win-inner)}
+.shots span{display:block;font:14px/1.35 var(--body);color:var(--muted);margin-top:4px}
 .handoff{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:2px dashed var(--win-inner);padding-top:10px}
 .handoff textarea{min-height:56px;font-size:16px}
 details.interns{margin-top:10px;border-top:2px dashed var(--win-inner);padding-top:8px}
@@ -1466,12 +1470,31 @@ fieldset:disabled .lock{display:block}
       inbox.seen = inbox.seen.slice(-200); saveInbox();
     } catch {} finally { polling = false; }
   }
+  // Screenshots in Claude's replies: markdown images hosted in the inbox repo itself (GitHub raw files or its Pages site)
+  // are shown under the reply. Images from anywhere else stay as plain text, since the repo is public.
+  function splitShots(text){
+    const [owner, name] = inbox.repo.split("/");
+    const esc = v => String(v || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hosts = "(?:https://raw\\.githubusercontent\\.com/" + esc(owner) + "/" + esc(name) + "/|https://" + esc(owner) + "\\.github\\.io/" + esc(name) + "/)";
+    const re = new RegExp("!\\[([^\\]]*)\\]\\((" + hosts + "[^\\s)]+?\\.(?:png|jpe?g|webp|gif))\\)", "gi");
+    const shots = [];
+    const clean = text.replace(re, (m, alt, url) => { shots.push({ alt, url }); return ""; }).replace(/\n{3,}/g, "\n\n").trim();
+    return { clean, shots };
+  }
+  function shotGallery(shots){
+    return el("div", { className: "shots" }, ...shots.map(sh => el("a", { href: sh.url, target: "_blank", rel: "noopener" },
+      el("img", { src: sh.url, alt: sh.alt || "Screenshot from Claude", loading: "lazy" }), sh.alt ? el("span", { textContent: sh.alt }) : "")));
+  }
   function claudeSays(text, at, quiet){
-    lastSaid.set(CLAUDE, text);
-    if (!quiet) logTurn("claude", "CLAUDE · REPLY", new Date(at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), text);
+    const { clean, shots } = splitShots(text);
+    lastSaid.set(CLAUDE, clean);
+    if (!quiet) {
+      const lt = logTurn("claude", "CLAUDE · REPLY", new Date(at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), clean);
+      if (shots.length) lt.art.appendChild(shotGallery(shots));
+    }
     if (controller) return; // don't talk over a running relay; it's in the log
     scene.claudeVisit();
-    say("Claude", "claude", text);
+    say("Claude", "claude", clean + (shots.length ? "\n\n[" + shots.length + " screenshot" + (shots.length > 1 ? "s" : "") + " in the log below. Tap one to open it full size.]" : ""));
   }
   setInterval(pollInbox, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollInbox(); });
