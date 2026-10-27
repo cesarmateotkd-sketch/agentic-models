@@ -911,12 +911,34 @@ fieldset:disabled .lock{display:block}
   let hiddenAt = 0;
   document.addEventListener("visibilitychange", () => { if (document.hidden) hiddenAt = Date.now(); });
   const whenVisible = () => document.hidden ? new Promise(res => { const f = () => { if (!document.hidden) { document.removeEventListener("visibilitychange", f); res(); } }; document.addEventListener("visibilitychange", f); }) : Promise.resolve();
+  // Free tiers often answer "rate limit, try again in 24s" (Groq allows 8K tokens a minute) or "high demand" (Gemini).
+  // Those calls wait and retry up to twice, counting down in the status line, instead of losing the turn.
+  // A wait over a minute (a daily quota) isn't worth it: that error goes straight back to the relay.
+  const waitFor = (ms, signal) => new Promise((res, rej) => {
+    if (signal.aborted) return rej(new DOMException("Stopped", "AbortError"));
+    const t = setTimeout(() => { signal.removeEventListener("abort", stop); res(); }, ms);
+    const stop = () => { clearTimeout(t); rej(new DOMException("Stopped", "AbortError")); };
+    signal.addEventListener("abort", stop, { once: true });
+  });
   async function callAgent(a, userMsg, runSignal, images){
+    let waits = 0;
     for (let attempt = 0; ; attempt++) {
       const started = Date.now();
       try { return await callAgentAttempt(a, userMsg, runSignal, images); }
       catch (e) {
         if (attempt === 0 && isNetErr(e) && !runSignal.aborted && hiddenAt >= started) { await whenVisible(); continue; }
+        const busy = e.status === 429 || e.status === 503 || e.status === 529;
+        const secs = e.retryAfter || (e.status === 429 ? 20 : 8);
+        if (busy && waits < 2 && secs <= 60 && !runSignal.aborted) {
+          waits++;
+          const st = $("status"), before = st.textContent;
+          for (let left = Math.ceil(secs) + 1; left > 0; left--) {
+            st.textContent = "WAITING " + left + "s · " + PROVIDERS[a.provider].name.toUpperCase() + " IS BUSY (" + a.name.toUpperCase() + ")";
+            await waitFor(1000, runSignal);
+          }
+          st.textContent = before;
+          continue;
+        }
         throw e;
       }
     }
@@ -972,7 +994,12 @@ fieldset:disabled .lock{display:block}
       : status === 429 ? " Rate limit hit. Wait a bit or move this teammate to another provider."
       : status === 402 ? " This model needs credit. Pick a free one."
       : status === 400 || status === 404 ? " The model name may be wrong. Tap the Model field to pick from the list." : "";
-    return new Error(a.name + " (" + PROVIDERS[a.provider].name + " · " + a.model + "): " + (msg || "HTTP " + status) + hint);
+    const e = new Error(a.name + " (" + PROVIDERS[a.provider].name + " · " + a.model + "): " + (msg || "HTTP " + status) + hint);
+    e.status = status;
+    const m = /try again in\s+(?:(\d+)m)?\s*([\d.]+)\s*(ms|s)\b/i.exec(msg || "");
+    if (m) e.retryAfter = (+(m[1] || 0)) * 60 + (m[3].toLowerCase() === "ms" ? +m[2] / 1000 : +m[2]);
+    else if (/high demand|overloaded|temporarily unavailable/i.test(msg || "")) e.retryAfter = 8;
+    return e;
   }
 
   /* ================= relay ================= */
