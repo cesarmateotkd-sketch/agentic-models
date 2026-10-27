@@ -102,7 +102,7 @@ a{color:var(--helper)}
 .agent{border:2px solid var(--win-edge);border-left:8px solid var(--c);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:10px;background:#fff}
 .agent.builder{--c:var(--builder)}.agent.judge{--c:var(--judge)}.agent.helper{--c:var(--helper)}
 .agent-top{display:flex;gap:8px;align-items:center}
-.agent-top canvas{width:36px;height:45px;image-rendering:pixelated;flex:0 0 auto}
+.agent-top canvas{width:32px;height:40px;image-rendering:pixelated;flex:0 0 auto}
 .agent-top .names{flex:1;display:flex;gap:6px;min-width:0;flex-wrap:wrap}
 .agent-top .names input{flex:1 1 100px}
 .agent textarea{min-height:64px;font-size:16px}
@@ -428,8 +428,8 @@ fieldset:disabled .lock{display:block}
     const box = $("agents"); box.textContent = "";
     team.forEach((a, i) => {
       const card = el("div", { className: "agent " + a.role });
-      const face = el("canvas", { width: 12, height: 15 });
-      face.getContext("2d").drawImage(sprite(palFor(a), "idle"), 0, 0);
+      const face = el("canvas", { width: 16, height: 20 });
+      face.getContext("2d").drawImage(charSprite(palFor(a), "front", 0, "idle", false), 0, 0);
       face.setAttribute("aria-hidden", "true");
       const name = el("input", { value: a.name, id: "an-" + i }); name.setAttribute("aria-label", "Name");
       name.addEventListener("change", () => { a.name = name.value.trim() || "Temp " + (i + 1); saveTeam(); });
@@ -475,33 +475,6 @@ fieldset:disabled .lock{display:block}
   $("resetTeam").onclick = () => { team = DEFAULT_TEAM(); saveTeam(); renderTeam(); };
 
   /* ================= pixel art ================= */
-  const BODY = [
-    "...OOOOOO...",
-    "..OHHHHHHO..",
-    ".OHHHHHHHHO.",
-    ".OHSSSSSSHO.",
-    ".OSESSSSESO.",
-    ".OSSSSSSSSO.",
-    "..OSSSSSSO..",
-    "...OOSSOO...",
-    "..OCCCCCCO..",
-    ".OCCCDDCCCO.",
-    ".OSOCCCCOSO.",
-    "..OCCCCCCO..",
-    "..OPPPPPPO..",
-    "..OPPOOPPO.."
-  ];
-  const FEET = { idle: "..OBBO.OBBO.", walkA: ".OBBO..OBBO.", walkB: "..OBBO..OBBO" };
-  const MINI = [".OOOOO.", "OHHHHHO", "OSESESO", "OSSSSSO", ".OSSSO.", "OCCCCCO", "OCDDDCO", ".OPOPO."];
-  const MINI_FEET = { idle: ".BB.BB.", walkA: "BB..BB.", walkB: ".BB..BB" };
-  // Matrix skin: same silhouette, with sunglasses (K), white collar (W) and a tie (D) in the teammate's role color
-  const AGENT = BODY.map((row, y) => y === 4 ? ".OSKKKKKKSO." : y === 8 ? "..OCWWWWCO.." : y === 9 ? ".OCCCDDCCCO." : row);
-  const NEO = BODY.map((row, y) => y === 4 ? ".OSKKSSKKSO." : y === 12 ? "..OCCCCCCO.." : y === 13 ? "..OCPOOPCO.." : row);
-  const MINI_AGENT = MINI.map((row, y) => y === 2 ? "OSKKKSO" : row);
-  // Tactics skin: judges are Knights (visored helm), builders Black Mages (wide hat, shadowed face, glowing eyes), helpers White Mages (trimmed hood)
-  const KNIGHT = BODY.map((row, y) => [ "...OOOOOO...", "..OHHHHHHO..", ".OHHHHHHHHO.", ".OHKKKKKKHO.", ".OSESSSSESO." ][y] || (y === 9 ? ".OCCCDDCCCO." : row));
-  const BMAGE = BODY.map((row, y) => [ "....OOOO....", "...OHHHHO...", "..OHHHHHHO..", "OHHHHHHHHHHO", ".OKYKKKKYKO.", ".OKKKKKKKKO.", "..OKKKKKKO.." ][y] || row);
-  const WMAGE = BODY.map((row, y) => [ "...OOOOOO...", "..OWWWWWWO..", ".OWRWWWWRWO.", ".OWSSSSSSWO.", ".OWESSSSEWO." ][y] || (y === 11 ? "..ORCCCCRO.." : row));
   const shade = (hex, f) => "#" + [1, 3, 5].map(i => Math.max(0, Math.min(255, Math.round(parseInt(hex.substr(i, 2), 16) * f))).toString(16).padStart(2, "0")).join("");
   const JOBS = { judge: { kind: "knight", hair: "#9aa4ae", shirt: "#7e8a96", tie: "#b8283a" },
                  builder: { kind: "bmage", hair: "#c9a35a", shirt: "#3a4a8a", tie: "#232d5a" },
@@ -510,19 +483,124 @@ fieldset:disabled .lock{display:block}
     ? { kind: "agent", hair: shade(HAIRS[a.hair % HAIRS.length], .35), shirt: "#1e2326", tie: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper }
     : isTactics() ? JOBS[a.role] || JOBS.helper
     : { hair: HAIRS[a.hair % HAIRS.length], shirt: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper };
-  const spriteCache = {};
-  function sprite(pal, frame, mini){
-    const k = (pal.kind || "") + pal.hair + pal.shirt + (pal.tie || "") + frame + (mini ? "m" : "");
-    if (spriteCache[k]) return spriteCache[k];
-    const c = document.createElement("canvas"); c.width = mini ? 7 : 12; c.height = mini ? 9 : 15;
+  /* ================= character sprites ================= */
+  // Characters are 16x20 and painted from shaded parts onto a grid; the outline is added afterwards
+  // (any empty pixel touching the figure). Views: front, back and side; facing left is the side view mirrored.
+  // Walk is 4 frames (two strides, two passing frames with the body lifted a pixel); "write" raises an arm at the board.
+  const CW = 16, CH = 20, MW = 9, MH = 12;
+  const lighten = (hex, f) => "#" + [1, 3, 5].map(i => { const v = parseInt(hex.substr(i, 2), 16); return Math.min(255, Math.round(v + (255 - v) * f)).toString(16).padStart(2, "0"); }).join("");
+  const outlineFor = k => k === "agent" || k === "neo" ? "#0b0f0c" : ["knight", "bmage", "wmage", "hero", "squire"].includes(k) ? "#2a1e14" : "#283040";
+  const charCache = {};
+  function gridToCanvas(g, w, h, o, mirror){
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
     const x = c.getContext("2d");
-    const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: pal.tie || shade(pal.shirt, .7), P: "#485878", B: "#283040", K: "#050505", W: "#e8ece8", Y: "#f8e048", R: "#b8283a" };
-    if (pal.kind === "agent" || pal.kind === "neo") Object.assign(map, { O: "#0b0f0c", P: pal.kind === "neo" ? "#0b0b0b" : "#16191b", B: "#000" });
-    if (["knight", "bmage", "wmage"].includes(pal.kind)) Object.assign(map, { O: "#2a1e14", P: "#5a4430", B: "#3a2a1a", K: "#14101a", W: pal.hair });
-    const rows = mini ? (pal.kind === "agent" ? MINI_AGENT : MINI)
-      : ({ neo: NEO, agent: AGENT, knight: KNIGHT, bmage: BMAGE, wmage: WMAGE })[pal.kind] || BODY;
-    (mini ? [...rows, MINI_FEET[frame]] : [...rows, FEET[frame]]).forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
-    return spriteCache[k] = c;
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      let col = g[j][i];
+      if (!col && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => g[j + b]?.[i + a])) col = o;
+      if (col) { x.fillStyle = col; x.fillRect(mirror ? w - 1 - i : i, j, 1, 1); }
+    }
+    return c;
+  }
+  function charSprite(pal, dir, frame, pose, blink){
+    const key = [pal.kind || "", pal.hair, pal.shirt, pal.tie || "", dir, frame, pose || "", blink ? 1 : 0].join("|");
+    if (charCache[key]) return charCache[key];
+    const g = Array.from({ length: CH }, () => Array(CW).fill(null));
+    const F = (x, y, w, h, c) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (i >= 0 && i < CW && j >= 0 && j < CH) g[j][i] = c; };
+    const P = (x, y, c) => F(x, y, 1, 1, c);
+    const k = pal.kind || "", side = dir === "left" || dir === "right", back = dir === "back";
+    const robe = k === "bmage" || k === "wmage";
+    const skin = "#f8c8a0", skinD = "#e0a078", blush = "#f4a8a0", eye = "#283040", K = "#0a0a0c";
+    const hair = pal.hair, hairD = shade(hair, .72), hairL = lighten(hair, .35);
+    const cloth = pal.shirt, clothD = shade(cloth, .72), clothL = lighten(cloth, .22), tie = pal.tie || clothD;
+    const pants = ({ agent: "#16191b", neo: "#0b0b0b", knight: "#6a747e", hero: "#6b4a2a", squire: "#6b4a2a" })[k] || "#485878", pantsD = shade(pants, .7);
+    const shoe = k === "agent" || k === "neo" ? "#050505" : k ? "#3a2a1a" : "#283040";
+    const walk = pose === "walk", u = walk && frame % 2 ? -1 : 0, stride = walk ? (frame === 0 ? 1 : frame === 2 ? -1 : 0) : 0;
+    if (side) {
+      if (!robe) {
+        if (stride) { F(6, 15, 2, 3, pantsD); F(9, 15, 2, 3, pants); F(5, 18, 2, 1, shoe); F(10, 18, 2, 1, shoe); }
+        else { F(7, 15, 2, 3, pants); F(7, 18, 3, 1, shoe); }
+      }
+      F(6, 10 + u, 5, robe ? 8 - u : 5, cloth); F(6, 10 + u, 1, robe ? 8 - u : 5, clothD); F(10, 10 + u, 1, robe ? 8 - u : 5, clothL);
+      if (robe) F(stride > 0 ? 9 : stride < 0 ? 5 : 7, 18, 3, 1, shoe);
+      if (k === "neo") { F(5, 14 + u, 7, 4 - u, cloth); F(5, 15, 1, 3, clothL); }
+      if (k === "agent") F(10, 10 + u, 1, 2, "#e8ece8");
+      if (k === "knight") F(7, 10 + u, 3, 5, tie);
+      if (k === "wmage") for (let i = 6; i <= 10; i += 2) P(i, 17, tie);
+      if (k === "hero") { P(7, 11 + u, tie); P(8, 12 + u, tie); P(9, 13 + u, tie); }
+      const ax = stride > 0 ? 6 : stride < 0 ? 10 : 8;
+      F(8, 10 + u, 2, 3, clothD); F(ax, 13 + u, 2, 1, clothD); F(ax, 14 + u, 2, 1, skin);
+      F(5, 2 + u, 7, 8, skin); F(11, 4 + u, 1, 4, skin); P(12, 6 + u, skin); F(6, 9 + u, 5, 1, skinD);
+      P(10, 5 + u, eye); P(10, 6 + u, blink ? skinD : eye); P(9, 7 + u, blush);
+    } else {
+      if (!robe) {
+        const lLen = stride > 0 ? 4 : stride < 0 ? 3 : 4, rLen = stride < 0 ? 4 : stride > 0 ? 3 : 4;
+        F(5, 15, 2, lLen - 1, pants); F(9, 15, 2, rLen - 1, pants); P(6, 15, pantsD); P(9, 15, pantsD);
+        F(5, 14 + lLen, 2, 1, shoe); F(9, 14 + rLen, 2, 1, shoe);
+      }
+      F(4, 10 + u, 8, robe ? 8 - u : 5, cloth); F(4, 10 + u, 1, robe ? 8 - u : 5, clothL); F(11, 10 + u, 1, robe ? 8 - u : 5, clothD); F(5, 10 + u, 6, 1, clothL);
+      if (robe) { F(stride > 0 ? 4 : 5, 18, 2, 1, shoe); F(stride < 0 ? 10 : 9, 18, 2, 1, shoe); }
+      if (!back) {
+        if (!k) { P(6, 10 + u, "#f4f4f0"); P(9, 10 + u, "#f4f4f0"); F(4, 14 + u, 8, 1, pantsD); }
+        if (k === "agent") { F(7, 10 + u, 2, 1, "#e8ece8"); F(7, 11 + u, 2, 4, tie); P(7, 11 + u, lighten(tie, .3)); }
+        if (k === "hero") { [[5, 10], [6, 11], [7, 12], [8, 13], [9, 14]].forEach(([a, b]) => P(a, b + u, tie)); F(4, 14 + u, 8, 1, "#6b4424"); }
+      }
+      if (k === "neo") { F(4, 14 + u, 3, 4 - u, cloth); F(9, 14 + u, 3, 4 - u, cloth); if (!back) { P(6, 10 + u, clothL); P(9, 10 + u, clothL); } else F(7, 14 + u, 2, 4 - u, cloth); }
+      if (k === "knight") { F(6, 10 + u, 4, 6, tie); F(4, 14 + u, 8, 1, "#5a4430"); P(6, 10 + u, lighten(tie, .3)); }
+      if (k === "bmage") F(6, 10 + u, 4, 1, clothD);
+      if (k === "wmage") { for (let i = 4; i <= 11; i += 2) P(i, 17, tie); P(3, 13 + u, tie); P(12, 13 + u, tie); }
+      const lh = stride > 0 ? 14 : 13, rh = stride < 0 ? 14 : 13, armC = robe ? cloth : clothD;
+      F(3, 10 + u, 1, lh - 10, armC); P(3, lh + u, skin);
+      if (pose === "write") { const w = frame % 2; F(12, 6 + w, 1, 5, armC); P(12, 5 + w, skin); }
+      else { F(12, 10 + u, 1, rh - 10, armC); P(12, rh + u, skin); }
+      F(4, 2 + u, 8, 8, skin); F(5, 9 + u, 6, 1, skinD); F(11, 3 + u, 1, 6, skinD);
+      if (!back) {
+        P(6, 5 + u, eye); P(9, 5 + u, eye); P(6, 6 + u, blink ? skinD : eye); P(9, 6 + u, blink ? skinD : eye);
+        P(5, 7 + u, blush); P(10, 7 + u, blush); F(7, 8 + u, 2, 1, skinD);
+      }
+    }
+    // headwear and face details per character type, drawn last so they sit on top of the head
+    const H = (x, y, w, h, c) => F(x, y + u, w, h, c), Hp = (x, y, c) => P(x, y + u, c);
+    if (k === "knight") {
+      const steel = hair, steelL = lighten(hair, .35), dark = "#1a1418";
+      if (side) { H(4, 1, 8, 6, steel); H(5, 0, 5, 1, steel); H(8, 4, 4, 1, dark); H(5, 1, 3, 1, steelL); Hp(6, 0, tie); }
+      else { H(4, 1, 8, 6, steel); H(3, 2, 10, 4, steel); H(5, 0, 6, 1, steel); Hp(7, 0, tie); Hp(8, 0, tie); H(4, 1, 3, 1, steelL); if (!back) H(5, 4, 6, 1, dark); else H(4, 6, 8, 2, shade(steel, .8)); }
+    } else if (k === "bmage") {
+      const hat = hair, hatD = shade(hair, .7), face = "#14101a", glow = "#f8e048";
+      if (side) { H(5, 6, 7, 4, face); if (!blink) Hp(10, 7, glow); H(2, 5, 13, 1, hat); H(3, 4, 11, 1, hat); H(5, 3, 6, 1, hatD); H(6, 2, 4, 1, hat); H(5, 1, 3, 1, hat); H(4, 0, 2, 1, hat); }
+      else { if (!back) { H(4, 6, 8, 4, face); if (!blink) { Hp(6, 7, glow); Hp(9, 7, glow); } } else H(4, 6, 8, 4, clothD);
+        H(1, 5, 14, 1, hat); H(2, 4, 12, 1, hat); H(5, 3, 6, 1, hatD); H(6, 2, 4, 1, hat); H(7, 1, 3, 1, hat); H(8, 0, 2, 1, hat); Hp(5, 4, lighten(hat, .3)); }
+    } else if (k === "wmage") {
+      const hood = hair, hoodD = shade(hair, .82);
+      if (side) { H(4, 0, 8, 3, hood); H(4, 3, 4, 7, hood); Hp(4, 9, tie); Hp(6, 9, tie); Hp(11, 2, tie); }
+      else if (back) { H(3, 0, 10, 10, hood); H(3, 9, 10, 1, hoodD); for (let i = 3; i <= 12; i += 2) Hp(i, 9, tie); }
+      else { H(4, 0, 8, 1, hood); H(3, 1, 10, 2, hood); H(3, 3, 2, 7, hood); H(11, 3, 2, 7, hood); H(5, 3, 6, 1, hoodD);
+        Hp(3, 5, tie); Hp(12, 5, tie); Hp(3, 8, tie); Hp(12, 8, tie); Hp(7, 1, tie); Hp(8, 1, tie); }
+    } else {
+      // hair: office folk, Matrix agents (slicked back), Neo, the Tactics hero (spiky) and squires
+      if (side) { H(5, 0, 6, 1, hair); H(4, 1, 8, 2, hair); H(4, 3, 4, 5, hair); H(6, 1, 3, 1, hairL); H(4, 6, 1, 2, hairD);
+        if (k !== "agent") Hp(11, 3, hair); if (k === "hero") { Hp(3, 2, hair); Hp(5, 0, hair); } }
+      else if (back) { H(5, 0, 6, 1, hair); H(3, 1, 10, 7, hair); H(4, 8, 8, 1, hairD); H(5, 1, 3, 1, hairL); }
+      else { H(5, 0, 6, 1, hair); H(3, 1, 10, 3, hair); H(3, 4, 1, 3, hair); H(12, 4, 1, 3, hair); H(5, 1, 3, 1, hairL); H(12, 2, 1, 2, hairD);
+        if (k !== "agent" && k !== "neo") { Hp(4, 4, hair); Hp(5, 4, hair); Hp(10, 4, hair); Hp(11, 4, hair); }
+        if (k === "hero") { Hp(3, 0, hair); Hp(12, 0, hair); Hp(7, 4, hair); } }
+      if (k === "agent") { if (side) H(9, 5, 3, 2, K); else if (!back) { H(5, 5, 2, 2, K); H(9, 5, 2, 2, K); H(7, 5, 2, 1, K); Hp(5, 5, "#5a6a70"); } }
+      if (k === "neo") { if (side) { Hp(10, 5, K); Hp(10, 6, K); } else if (!back) { Hp(6, 5, K); Hp(6, 6, K); Hp(9, 5, K); Hp(9, 6, K); H(7, 5, 2, 1, K); } }
+    }
+    return charCache[key] = gridToCanvas(g, CW, CH, outlineFor(k), dir === "left");
+  }
+  // interns: a smaller figure, front view only, two walk frames
+  function miniSprite(pal, frame){
+    const key = "m|" + [pal.kind || "", pal.hair, pal.shirt, pal.tie || "", frame].join("|");
+    if (charCache[key]) return charCache[key];
+    const g = Array.from({ length: MH }, () => Array(MW).fill(null));
+    const F = (x, y, w, h, c) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (i >= 0 && i < MW && j >= 0 && j < MH) g[j][i] = c; };
+    const k = pal.kind || "", cloth = pal.shirt, pants = ({ agent: "#16191b", squire: "#6b4a2a" })[k] || "#485878", shoe = k === "agent" ? "#050505" : "#283040";
+    F(2, 9, 2, frame === 1 ? 1 : 2, pants); F(5, 9, 2, frame === 2 ? 1 : 2, pants); F(2, frame === 1 ? 10 : 11, 2, 1, shoe); F(5, frame === 2 ? 10 : 11, 2, 1, shoe);
+    F(2, 6, 5, 3, cloth); F(6, 6, 1, 3, shade(cloth, .72)); F(1, 6, 1, 2, shade(cloth, .72)); F(7, 6, 1, 2, shade(cloth, .72)); F(1, 8, 1, 1, "#f8c8a0"); F(7, 8, 1, 1, "#f8c8a0");
+    if (k === "agent") F(4, 6, 1, 3, pal.tie || "#3cff6b");
+    F(2, 1, 5, 5, "#f8c8a0"); F(2, 0, 5, 2, pal.hair); F(1, 1, 1, 3, pal.hair); F(7, 1, 1, 3, pal.hair); F(3, 0, 2, 1, lighten(pal.hair, .35));
+    if (k === "agent") F(2, 3, 5, 1, "#0a0a0c"); else { F(3, 3, 1, 1, "#283040"); F(5, 3, 1, 1, "#283040"); }
+    return charCache[key] = gridToCanvas(g, MW, MH, outlineFor(k), false);
   }
 
   /* ================= office scene ================= */
@@ -559,7 +637,7 @@ fieldset:disabled .lock{display:block}
     }
     const CLAUDE_SPOT = { x: 82, y: 46 }, CLAUDE_BOARD = { x: 104, y: 46 };
     const CLAUDE_PAL = { hair: "#efe6d6", shirt: "#d97757" }, NEO_PAL = { kind: "neo", hair: "#0d0d0d", shirt: "#0e0e0e", tie: "#1c1c1c" };
-    const HERO_PAL = { hair: "#e8c050", shirt: "#3a5aa8", tie: "#d8b040" }; // Tactics: a blond squire-hero in blue with a gold sash
+    const HERO_PAL = { kind: "hero", hair: "#e8c050", shirt: "#3a5aa8", tie: "#d8b040" }; // Tactics: a blond squire-hero in blue with a gold sash
     const claudePal = () => isMatrix() ? NEO_PAL : isTactics() ? HERO_PAL : CLAUDE_PAL;
     const claude = { x: CLAUDE_SPOT.x, y: CLAUDE_SPOT.y, path: [], resolve: null, bubble: null, away: false, idx: 99, home: { desk: false }, pal: isMatrix() ? NEO_PAL : CLAUDE_PAL, agent: null, show: false };
     claude.pal = claudePal();
@@ -729,13 +807,18 @@ fieldset:disabled .lock{display:block}
     }
     function drawNpc(n){
       const moving = n.path.length > 0;
-      const frame = moving ? (Math.floor(t * 8) % 2 ? "walkA" : "walkB") : "idle";
-      const bob = moving ? (Math.floor(t * 8) % 2) : (!n.away && !reduce && Math.sin(t * 3 + n.idx * 1.7) > .7 ? 1 : 0);
+      if (moving) { const p = n.path[0], dx = p.x - n.x, dy = p.y - n.y; n.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : dy < 0 ? "back" : "front"; }
+      else n.dir = n.away ? "back" : "front"; // at the board or the intern table they face it; at a desk they face us
+      const pose = moving ? "walk" : n.away && n.bubble === "dots" ? "write" : "idle";
+      const frame = reduce ? 1 : pose === "walk" ? Math.floor(t * 8) % 4 : pose === "write" ? Math.floor(t * 4) % 2 : 0;
+      const blink = !moving && !reduce && ((t + n.idx * .73) % 3.7) < .13;
+      const breathe = !moving && !n.away && !reduce && Math.sin(t * 2 + n.idx * 1.7) > .6 ? 1 : 0;
+      const jump = n.bubble === "star" && !reduce ? -Math.round(Math.abs(Math.sin(t * 7 + n.idx)) * 3) : 0;
       const x = Math.round(n.x), y = Math.round(n.y);
-      if (n.away) R(x - 4, y - 1, 8, 2, "rgba(40,48,64,.25)");
-      if (n.mini) { ctx.drawImage(sprite(n.pal, frame, true), x - 3, y - 9 + bob); if (n.bubble) bubble(x, y + 6 + bob, n.bubble); return; }
-      ctx.drawImage(sprite(n.pal, frame), x - 6, y - 15 + bob);
-      if (n.bubble) bubble(x, y + bob, n.bubble);
+      ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(x - (n.mini ? 3 : 5), y - 1, n.mini ? 6 : 10, 2);
+      if (n.mini) { ctx.drawImage(miniSprite(n.pal, moving && !reduce ? 1 + Math.floor(t * 8) % 2 : 0), x - 4, y - 12 + jump); if (n.bubble) bubble(x, y + 3 + jump, n.bubble); return; }
+      ctx.drawImage(charSprite(n.pal, n.dir, frame, pose, blink), x - 8, y - 20 + breathe + jump);
+      if (n.bubble) bubble(x, y - 5 + breathe + jump, n.bubble);
     }
 
     function step(now){
@@ -764,7 +847,7 @@ fieldset:disabled .lock{display:block}
 
     cv.addEventListener("click", e => {
       const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * 240 / r.width, py = (e.clientY - r.top) * 160 / r.height;
-      const hit = everyone().slice().reverse().find(n => Math.abs(n.x - px) <= 7 && py >= n.y - 17 && py <= n.y + 1);
+      const hit = everyone().slice().reverse().find(n => Math.abs(n.x - px) <= 8 && py >= n.y - 21 && py <= n.y + 1);
       if (hit) onTap(hit.agent);
     });
     async function claudeVisit(){
@@ -777,7 +860,7 @@ fieldset:disabled .lock{display:block}
     // re-dress everyone for the current skin; positions and paths don't change
     function reskin(){ npcs.forEach(n => n.pal = palFor(n.agent)); interns.forEach(n => n.pal = Object.assign({}, n.pal, internPal())); claude.pal = claudePal(); }
     // interns: suits in the Matrix, squire tunics in Tactics
-    const internPal = () => isMatrix() ? { kind: "agent", shirt: "#1e2326", tie: "#3cff6b" } : isTactics() ? { kind: undefined, shirt: "#b08a50", tie: "#6b4424" } : { kind: undefined, tie: undefined };
+    const internPal = () => isMatrix() ? { kind: "agent", shirt: "#1e2326", tie: "#3cff6b" } : isTactics() ? { kind: "squire", shirt: "#b08a50", tie: "#6b4424" } : { kind: undefined, tie: undefined };
     return { reskin, spawnInterns, internsBack, setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
   })();
 

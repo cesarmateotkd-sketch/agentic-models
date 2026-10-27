@@ -55,6 +55,8 @@ If a playbook's provider has no key, that teammate moves to one you've connected
 
 **Skins:** *Office* (classic) or *Matrix*: same layout, green code rain, agents in suits and sunglasses (their tie shows their role), and Neo, which is Claude, always in the room. The narrator becomes the Operator, and A/B are the red and blue pills. *Tactics (PSX)*: a stone war room with stained glass, a war map, torches and a crystal. Knights judge, Black Mages write and White Mages help, Claude is a blond hero in blue, the menus are parchment, and A/B become ○ and ×.
 
+Characters are 16×20 shaded pixel sprites with front, back and side views. They take a 4-step walk with arm swing, blink and breathe while idle, write on the board during their turn, and jump when the team is approved.
+
 If a playbook's writer fails (wrong model name, rate limit), it tries once more on another connected provider. Judges wait until there's a draft, and a run with no draft sends nothing to Claude.
 
 ## Interns (teammates delegating work)
