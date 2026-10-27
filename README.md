@@ -49,6 +49,8 @@ If a playbook's provider has no key, that teammate moves to one you've connected
 
 **Jobs from Claude** appear at the top once the Claude inbox is connected. When Claude finishes a preview, a **Ready to merge** card appears there too: tap **MERGE IT** to put it live, or **CHANGES** to send notes. Tap **RUN**; when the team finishes, the result goes back to Claude automatically.
 
+**Why the team decided this:** every finished run ends with a short summary of why it ended where it did, built only from what the team said. It covers what was decided, why (who raised what), how it was checked, and, for article playbooks, the search phrase and reader it targets. A NOT VERIFIED list names any claim nobody confirmed. It's saved in History and sent to Claude with the result.
+
 **History** keeps your last 20 runs, saved step by step, so locking the phone or closing the app doesn't lose work. If the phone locks during a model call, the app retries that call once when you come back.
 
 **⚙ (top right)** holds the skin, your keys (Connections) and the custom team (Team).

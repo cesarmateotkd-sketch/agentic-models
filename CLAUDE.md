@@ -39,6 +39,16 @@ Post a comment on PR #1 (as the owner's account, which is how the GitHub tools p
 ### "Change the app" handoffs
 A handoff whose `**Playbook:**` line says "Change the app" is a change request for this app, written by the free team from the owner's idea and sent automatically. Treat it as the owner asking for that change: build it on a `claude/*` branch, run the tests (including the upgrade test), reply on PR #1 with what changed and how to check it, with screenshots (see below), and merge to `main` only after the owner approves. If the request conflicts with the hard rules above, say so in the reply instead of building it.
 
+### Decision summaries (owner request, Oct 27, 2026)
+The owner wants to know why a decision was made, above all for articles posted on Strand.
+- The app adds a "Why the team decided this" summary to every run and to its handoff. Read it, and check its "NOT VERIFIED" list against real sources before using anything.
+- Every article preview you post (Strand posts, outlines, pins) carries your own **Why this article** section. Keep it short and specific:
+  - the data behind it: GSC queries with impressions and positions, GA traffic or Amazon clicks, with dates
+  - who it's for and the search phrase it targets
+  - the evidence used: PubMed links, plus what was marked "not studied" and why
+  - what the free team suggested and what you kept, changed or dropped, with the reason
+  - open risks or anything still unverified
+
 ### Merge approvals from the app
 The owner can approve a preview from the app instead of typing "merge it" in the Claude app (the owner asked for this on Oct 27, 2026).
 - When a preview is ready, put this hidden line in the reply: `<!-- relay-merge:v1 {"repo":"cesarmateotkd-sketch/agentic-models","branch":"claude/x","sha":"<full head sha>","title":"Short name"} -->`. The app shows a "Ready to merge" card with MERGE IT and CHANGES.

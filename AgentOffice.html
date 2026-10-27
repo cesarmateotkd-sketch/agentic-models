@@ -126,6 +126,9 @@ a{color:var(--helper)}
 .shots span{display:block;font:14px/1.35 var(--body);color:var(--muted);margin-top:4px}
 .handoff{display:flex;flex-direction:column;gap:8px;margin-top:12px;border-top:2px dashed var(--win-inner);padding-top:10px}
 .handoff textarea{min-height:56px;font-size:16px}
+details.why{margin-top:10px;border:2px solid var(--win-inner);border-radius:6px;padding:8px 10px}
+details.why>summary{font:9px/1.6 var(--px);color:var(--ink);cursor:pointer}
+details.why pre{margin-top:8px;font-size:15px}
 details.interns{margin-top:10px;border-top:2px dashed var(--win-inner);padding-top:8px}
 details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer}
 .intern-note{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-left:8px;border-left:3px solid var(--win-inner)}
@@ -1082,6 +1085,20 @@ fieldset:disabled .lock{display:block}
     return d;
   }
 
+  /* ================= decision summary ================= */
+  // After every run, one extra call explains why the team landed where it did, using only what was said in the run.
+  const ARTICLE_PLAYBOOKS = ["outline", "factcheck", "compliance", "pins", "visual"];
+  const SUMMARY_PROMPT = "You write short, honest decision summaries of a team's discussion for the owner. Use only what is in the transcript; never invent reasons, sources or data. Plain words, no code.";
+  function summaryRequest(task, turns, verdictLine, skipped, pbKey){
+    const transcript = turns.map(t => "### " + t.name + " (" + t.role + ", round " + t.round + ")\n" + (t.text.length > 2500 ? t.text.slice(0, 2500) + "\n[…trimmed]" : t.text)).join("\n\n");
+    const article = ARTICLE_PLAYBOOKS.includes(pbKey);
+    return "TASK GIVEN TO THE TEAM:\n" + task.split("\n\n")[0] + "\n\nTRANSCRIPT:\n" + transcript + "\n\nOUTCOME: " + verdictLine +
+      (skipped.length ? "\nPROBLEMS: " + skipped.map(x => x.name + ": " + x.msg).join("; ") : "") +
+      "\n\nWrite the summary with exactly these headings:\nWHAT WAS DECIDED: one sentence.\nWHY: 3–5 bullets. Tie each to who said it, e.g. \"Rex flagged X, so Gemma changed Y\".\nHOW IT WAS CHECKED: what the judges passed or failed, in one or two lines.\n" +
+      (article ? "FOR THE ARTICLE: which search phrase and reader it targets and why, as stated in the transcript (say \"not discussed\" if it wasn't).\n" : "") +
+      "NOT VERIFIED: every claim, study, product detail or number that nobody confirmed against a real source. Write \"Nothing flagged\" only if there truly is none.\nKeep it under 180 words.";
+  }
+
   function logTurn(cls, title, sub, text){
     $("track").querySelector(".empty")?.remove();
     const pre = el("pre", { textContent: text });
@@ -1222,8 +1239,19 @@ fieldset:disabled .lock{display:block}
       const done = Math.min(r, rounds);
       const verdictLine = approved ? "Approved by " + judges.filter(j => verdicts.get(j)).map(j => j.name).join(", ") + " in round " + done + "."
         : judges.length ? "Not approved: hit the " + rounds + "-round limit." : "No judges on the team.";
+      const verdictLineFor = () => verdictLine;
       const lastJudge = approved ? null : [...turns].reverse().find(t => t.role === "judge");
-      Object.assign(run, { status: approved ? "approved" : "done", calls, verdictLine, approved, round: done, skipped,
+      let why = null;
+      if (turns.length > 1 || ARTICLE_PLAYBOOKS.includes(pbKey)) {
+        status.textContent = "WRITING THE DECISION SUMMARY…";
+        const p = ["groq", "gemini", "mistral", "openrouter", "custom"].find(hasKey);
+        if (p) {
+          const scribe = { name: "Scribe", title: "Decision summary", role: "helper", provider: p, model: PROVIDERS[p].def || crew[0].model, prompt: SUMMARY_PROMPT };
+          try { why = await ask(scribe, summaryRequest(task, turns, verdictLineFor(), skipped, pbKey)); }
+          catch (e) { if (e.name === "AbortError") throw e; why = "(No summary this time: " + (isNetErr(e) ? "couldn't reach " + PROVIDERS[p].name : e.message) + ")"; }
+        }
+      }
+      Object.assign(run, { status: approved ? "approved" : "done", calls, verdictLine, approved, round: done, skipped, why,
         final: { name: draft.name, text: draft.text }, lastJudge: lastJudge ? { name: lastJudge.name, text: lastJudge.text } : null });
       saveRun(run);
       // a job's result goes straight back to Claude; anything else waits for the SEND TO CLAUDE button
@@ -1253,10 +1281,11 @@ fieldset:disabled .lock{display:block}
       try { await navigator.clipboard.writeText(run.final.text); btn.textContent = "COPIED"; }
       catch { const rg = document.createRange(); rg.selectNodeContents(fin.pre); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); btn.textContent = "SELECTED · TAP COPY"; }
     };
+    if (run.why) fin.art.appendChild(el("details", { className: "why", open: true }, el("summary", { textContent: "WHY THE TEAM DECIDED THIS" }), el("pre", { textContent: run.why })));
     fin.art.appendChild(btn);
     const job = run.jobId ? jobs.find(j => j.id === run.jobId) : null;
     fin.art.appendChild(handoffControls({ task: run.task, draft: run.final, crew: run.crew, verdictLine: run.verdictLine, lastJudge: run.lastJudge,
-      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent, skipped: run.skipped }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
+      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent, skipped: run.skipped, why: run.why }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
     return fin;
   }
   // the last 20 runs, each step saved as it happens, so a locked phone or a closed app doesn't lose the work
@@ -1467,7 +1496,7 @@ fieldset:disabled .lock{display:block}
   // the longest run of backticks in the text, plus one, so the deliverable can't break out of its code fence
   const fenceFor = t => "`".repeat(Math.max(3, ...(String(t).match(/`+/g) || []).map(m => m.length + 1)));
   const quote = t => String(t).split("\n").map(l => "> " + l).join("\n");
-  function handoffBody({ task, draft, crew, verdictLine, lastJudge, playbook, job, skipped }, note){
+  function handoffBody({ task, draft, crew, verdictLine, lastJudge, playbook, job, skipped, why }, note){
     const f = fenceFor(draft.text);
     const parts = [
       INBOX_MARK,
@@ -1479,6 +1508,7 @@ fieldset:disabled .lock{display:block}
       "**Outcome:** " + verdictLine,
       skipped?.length ? "**Problems during the run**\n" + skipped.map(x => "- " + x.name + ": " + x.msg).join("\n") : "",
       "**Team:** " + crew.map(a => a.name + " (" + a.role + ", " + PROVIDERS[a.provider].name + " " + a.model + ")").join("; "),
+      why ? "**Why the team decided this**\n" + quote(why) : "",
       "**Final deliverable** (by " + draft.name + ")\n" + f + "text\n" + clip(draft.text) + "\n" + f,
       lastJudge ? "**Last judge feedback** (" + lastJudge.name + ")\n" + quote(clip(lastJudge.text)) : ""
     ];
