@@ -4,9 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Relay">
 <meta name="theme-color" content="#3f3b8f">
 <title>AI Relay Office</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;600&display=swap">
 <style>
@@ -65,7 +70,7 @@ input,textarea,select{
   font:17px var(--body);color:var(--ink);background:#fff;
   border:2px solid var(--win-edge);border-radius:4px;padding:9px 10px;width:100%;min-width:0;
 }
-.mono{font-family:ui-monospace,Menlo,monospace!important;font-size:14px!important}
+.mono{font-family:ui-monospace,Menlo,monospace!important;font-size:16px!important}
 textarea{min-height:96px;resize:vertical}
 input:focus,textarea:focus,select:focus,button:focus-visible,a:focus-visible,canvas:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
 .row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
@@ -100,7 +105,7 @@ a{color:var(--helper)}
 .agent-top canvas{width:36px;height:45px;image-rendering:pixelated;flex:0 0 auto}
 .agent-top .names{flex:1;display:flex;gap:6px;min-width:0;flex-wrap:wrap}
 .agent-top .names input{flex:1 1 100px}
-.agent textarea{min-height:64px;font-size:15px}
+.agent textarea{min-height:64px;font-size:16px}
 .check{flex-direction:row;align-items:center;gap:8px}
 .check input{width:auto}
 .legend{display:flex;gap:6px;flex-wrap:wrap}
@@ -116,6 +121,10 @@ a{color:var(--helper)}
 .turn pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--body)}
 .turn .copy{margin-top:10px}
 .empty{color:var(--muted);font-size:15px;text-align:center;padding:8px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+fieldset:disabled .agent{opacity:.6}
+.lock{display:none;font:9px/1.5 var(--px);color:var(--err)}
+fieldset:disabled .lock{display:block}
 </style>
 </head>
 <body>
@@ -150,7 +159,8 @@ a{color:var(--helper)}
 
   <details class="win" id="teamPanel">
     <summary>Team <span class="hint" id="teamCount"></span></summary>
-    <div class="stack">
+    <fieldset class="stack" id="teamFields">
+      <div class="lock">LOCKED WHILE THE TEAM IS WORKING. PRESS B TO STOP.</div>
       <div class="legend"><span class="lane helper">HELPER adds input</span><span class="lane builder">BUILDER writes</span><span class="lane judge">JUDGE approves</span></div>
       <div class="stack" id="agents" style="margin-top:0"></div>
       <label>Hire a teammate <small>Each one is the best free model we found for that job.</small>
@@ -160,7 +170,7 @@ a{color:var(--helper)}
         <button type="button" id="addAgent">Hire</button>
         <button type="button" id="resetTeam">Reset team</button>
       </div>
-    </div>
+    </fieldset>
   </details>
 
   <details class="win" id="connPanel">
@@ -231,24 +241,27 @@ a{color:var(--helper)}
     const box = $("conns"); box.textContent = "";
     for (const pid in PROVIDERS) {
       const P = PROVIDERS[pid], c = conn[pid];
-      const chip = el("span", { className: "chip" + (c.ok === true ? " ok" : c.ok === false ? " err" : ""), textContent: c.ok === true ? "WORKING" : c.ok === false ? "FAILED" : c.key ? "UNTESTED" : "NO KEY" });
+      const chip = el("span", { id: "chip-" + pid });
+      paintChip(chip, c);
       const key = el("input", { type: "password", className: "mono", value: c.key, placeholder: "Paste key", autocomplete: "off", autocapitalize: "off", spellcheck: false, id: "key-" + pid });
       key.setAttribute("aria-label", P.name + " API key");
-      key.addEventListener("change", () => { c.key = key.value.trim(); c.ok = null; saveConn(); renderConns(); renderTeam(); });
+      key.addEventListener("change", () => { c.key = key.value.trim(); c.ok = null; saveConn(); paintChip(chip, c); renderTeam(); });
       const show = el("button", { type: "button", className: "tiny", textContent: "SHOW" });
       show.onclick = () => { const h = key.type === "text"; key.type = h ? "password" : "text"; show.textContent = h ? "SHOW" : "HIDE"; };
       const status = el("div", { className: "status", id: "cstat-" + pid });
       const test = el("button", { type: "button", className: "tiny", textContent: "TEST" });
       test.onclick = async () => {
-        c.key = key.value.trim(); status.className = "status"; status.textContent = "TESTING…";
-        try { const ids = await fetchModels(pid); c.ok = true; saveConn(); renderConns(); flash(pid, "Connected. " + ids.length + " models.", "ok"); }
-        catch (e) { c.ok = false; saveConn(); renderConns(); flash(pid, isNetErr(e) ? "Couldn't connect. You're offline or this provider blocks browser apps." : e.message, "err"); }
+        const had = c.key; c.key = key.value.trim(); status.className = "status"; status.textContent = "TESTING…";
+        if (c.key !== had) renderTeam();
+        if (pid === "custom" && !c.base) { c.ok = false; saveConn(); paintChip(chip, c); return flash(pid, "Enter the base URL first.", "err"); }
+        try { const ids = await fetchModels(pid); c.ok = true; saveConn(); paintChip(chip, c); flash(pid, "Connected. " + ids.length + " models.", "ok"); }
+        catch (e) { c.ok = false; saveConn(); paintChip(chip, c); flash(pid, isNetErr(e) ? "Couldn't connect. You're offline or this provider blocks browser apps." : e.message, "err"); }
       };
       const kids = [el("div", { className: "conn-head" }, el("b", { textContent: P.name }), chip), el("div", { className: "small", textContent: P.note })];
       if (pid === "custom") {
         const base = el("input", { className: "mono", value: c.base, placeholder: "https://example.com/v1", autocapitalize: "off", spellcheck: false, id: "base-custom" });
         base.setAttribute("aria-label", "Custom base URL");
-        base.addEventListener("change", () => { c.base = base.value.trim(); c.ok = null; saveConn(); });
+        base.addEventListener("change", () => { c.base = base.value.trim(); c.ok = null; saveConn(); paintChip(chip, c); });
         kids.push(base);
       }
       kids.push(el("div", { className: "keyrow" }, key, show, test));
@@ -256,6 +269,10 @@ a{color:var(--helper)}
       kids.push(status);
       box.appendChild(el("div", { className: "conn" }, ...kids));
     }
+  }
+  function paintChip(chip, c){
+    chip.className = "chip" + (c.ok === true ? " ok" : c.ok === false ? " err" : "");
+    chip.textContent = c.ok === true ? "WORKING" : c.ok === false ? "FAILED" : c.key ? "UNTESTED" : "NO KEY";
   }
   const flash = (pid, msg, cls) => { const s = $("cstat-" + pid); if (s) { s.className = "status " + cls; s.textContent = msg; } };
 
@@ -395,18 +412,27 @@ a{color:var(--helper)}
       });
     }
     function walk(n, pts){
+      // a new walk replaces the old one: settle the old promise so nothing waits on it forever
+      if (n.resolve) { const r = n.resolve; n.resolve = null; r(); }
       return new Promise(res => {
-        if (reduce) { const p = pts[pts.length - 1]; n.x = p.x; n.y = p.y; n.path = []; return res(); }
+        // rAF pauses in a background tab (or a locked iPhone), so snap instead of stalling the relay
+        if (reduce || document.hidden) { const p = pts[pts.length - 1]; n.x = p.x; n.y = p.y; n.path = []; return res(); }
         n.path = pts.slice(); n.resolve = res;
       });
     }
+    function finishWalks(){ npcs.forEach(n => { if (!n.path.length) return; const p = n.path[n.path.length - 1]; n.x = p.x; n.y = p.y; n.path = []; if (n.resolve) { const r = n.resolve; n.resolve = null; r(); } }); }
+    document.addEventListener("visibilitychange", () => { if (document.hidden) finishWalks(); });
+    // Paths only use the aisle above each desk row and the clear column at x=120, so nobody crosses a desk.
+    // If a walk is cut short, the next one first steps back onto its own aisle from wherever the NPC is.
     function toBoard(n){
       n.away = true; const s = n.home;
-      return walk(n, [{ x: s.x, y: s.corridor }, { x: BOARD.x, y: s.corridor }, { x: BOARD.x, y: BOARD.y }]);
+      return walk(n, [{ x: n.x, y: s.corridor }, { x: BOARD.x, y: s.corridor }, { x: BOARD.x, y: BOARD.y }]);
     }
     function toDesk(n){
       const s = n.home;
-      return walk(n, [{ x: BOARD.x, y: s.corridor }, { x: s.x, y: s.corridor }, { x: s.x, y: s.y }]).then(() => { n.away = false; });
+      n.away = true;
+      const p = walk(n, [{ x: BOARD.x, y: s.corridor }, { x: s.x, y: s.corridor }, { x: s.x, y: s.y }]);
+      return p.then(() => { if (!n.path.length && n.x === s.x && n.y === s.y) n.away = false; });
     }
     function allHome(){ npcs.forEach(n => { n.bubble = null; if (n.away || n.path.length) { n.path = []; n.x = n.home.x; n.y = n.home.y; n.away = false; n.resolve?.(); n.resolve = null; } }); }
     function celebrate(){
@@ -475,9 +501,13 @@ a{color:var(--helper)}
       confetti.forEach(c => { c.vy += 120 * dt; c.x += c.vx * dt; c.y += c.vy * dt; });
 
       room();
-      npcs.forEach(n => { if (n.home.desk) { if (!n.away) drawNpc(n); desk(n.home, !n.away); } });
-      npcs.forEach(n => { if (!n.home.desk && !n.away) drawNpc(n); });
-      npcs.filter(n => n.away).sort((a, b) => a.y - b.y).forEach(drawNpc);
+      // painter's order by feet/front-edge y: an NPC whose feet are above a desk's front edge is drawn behind it
+      const items = [];
+      npcs.forEach(n => {
+        if (n.home.desk) items.push({ z: n.home.dtop + 12, desk: true, n });
+        items.push({ z: n.y + (n.away ? .5 : 0), n });
+      });
+      items.sort((a, b) => a.z - b.z).forEach(it => it.desk ? desk(it.n.home, !it.n.away) : drawNpc(it.n));
       confetti.forEach(c => R(Math.round(c.x), Math.round(c.y), 2, 2, c.c));
       requestAnimationFrame(step);
     }
@@ -486,7 +516,7 @@ a{color:var(--helper)}
     cv.addEventListener("click", e => {
       const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * 240 / r.width, py = (e.clientY - r.top) * 160 / r.height;
       const hit = npcs.slice().reverse().find(n => Math.abs(n.x - px) <= 7 && py >= n.y - 17 && py <= n.y + 1);
-      if (hit) onTap(hit.agent, hit.idx);
+      if (hit) onTap(hit.agent);
     });
     return { sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
   })();
@@ -504,15 +534,31 @@ a{color:var(--helper)}
   }
   document.querySelector(".textbox").addEventListener("click", () => { clearInterval(typer); $("tbText").textContent = typedFull || $("tbText").textContent; });
   const lastSaid = new Map();
-  function onTap(a, i){
-    const said = lastSaid.get(i);
+  function onTap(a){
+    const said = lastSaid.get(a);
     say(a.name, a.role, said || `I'm ${a.name}, the ${a.title || a.role}. I run on ${PROVIDERS[a.provider]?.name || "?"} (${a.model}).`);
   }
 
   /* ================= calling models ================= */
-  async function callAgent(a, userMsg, signal){
+  const CALL_TIMEOUT = 180000;
+  const stripThink = t => String(t).replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim();
+  // AbortSignal.any() is too new for older iPhones, so link the run's signal to a per-call timeout by hand
+  async function callAgent(a, userMsg, runSignal){
+    const ctl = new AbortController();
+    const onAbort = () => ctl.abort();
+    if (runSignal.aborted) ctl.abort(); else runSignal.addEventListener("abort", onAbort);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, CALL_TIMEOUT);
+    try { return await callAgentOnce(a, userMsg, ctl.signal); }
+    catch (e) {
+      if (timedOut && !runSignal.aborted) throw new Error(a.name + " took longer than " + CALL_TIMEOUT / 60000 + " minutes to answer.");
+      throw e;
+    } finally { clearTimeout(timer); runSignal.removeEventListener("abort", onAbort); }
+  }
+  async function callAgentOnce(a, userMsg, signal){
     const P = PROVIDERS[a.provider], c = conn[a.provider];
     if (!c.key && a.provider !== "custom") throw new Error("No " + P.name + " key. Add it under Connections.");
+    if (!c.base && !P.base) throw new Error("No base URL for " + P.name + ". Add it under Connections.");
     const base = (c.base || P.base).replace(/\/+$/, "");
     const system = "You are " + a.name + ", the " + (a.title || a.role) + " (" + a.role + ") on a team of AI agents from different companies working on one task. " + a.prompt;
     let r, j = null;
@@ -523,7 +569,7 @@ a{color:var(--helper)}
       });
       try { j = await r.json(); } catch {}
       if (!r.ok) throw httpErr(a, r.status, j?.error?.message);
-      const text = (j?.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+      const text = stripThink((j?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought).map(p => p.text || "").join(""));
       if (!text) throw new Error(a.name + " returned an empty reply (it may have been blocked by safety filters).");
       return text;
     }
@@ -536,9 +582,11 @@ a{color:var(--helper)}
     });
     try { j = await r.json(); } catch {}
     if (!r.ok) throw httpErr(a, r.status, j?.error?.message || j?.message);
-    const text = j?.choices?.[0]?.message?.content;
+    let text = j?.choices?.[0]?.message?.content;
+    if (Array.isArray(text)) text = text.map(p => typeof p === "string" ? p : p?.text || "").join("");
+    text = text ? stripThink(text) : "";
     if (!text) throw new Error(a.name + " returned an empty reply.");
-    return String(text).trim();
+    return text;
   }
   function httpErr(a, status, msg){
     const hint = status === 401 || status === 403 ? " Check that key under Connections."
@@ -571,7 +619,9 @@ a{color:var(--helper)}
   }
 
   let controller = null;
-  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("led").classList.toggle("on", on); }
+  // the Team editor is locked during a run: NPCs are bound to team slots, so edits mid-run would desync them
+  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("teamFields").disabled = on; $("led").classList.toggle("on", on); }
+  const isApproval = text => /^\W*APPROVED\b/i.test(text.split("\n")[0]);
 
   $("task").value = store.get("task", "");
   $("task").addEventListener("input", () => store.set("task", $("task").value));
@@ -581,22 +631,27 @@ a{color:var(--helper)}
     const status = $("status"), task = $("task").value.trim();
     status.className = "status";
     if (!task) { status.className = "status err"; status.textContent = "Type a task first."; return; }
-    const missing = [...new Set(team.filter(a => a.provider !== "custom" && !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
+    if (controller) return;
+    const missing = [...new Set(team.filter(a => a.provider === "custom" ? !conn.custom.base : !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
     if (missing.length) { $("connPanel").open = true; status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under Connections, or move those teammates to a provider you've connected."; return; }
 
     $("track").textContent = ""; lastSaid.clear(); scene.allHome(); scene.clearMarks();
     controller = new AbortController(); const sig = controller.signal;
     setRunning(true);
     const rounds = +$("rounds").value;
-    const judges = team.filter(a => a.role === "judge");
+    const crew = team.slice();
+    const judges = crew.filter(a => a.role === "judge");
+    // verdicts only count for the current draft: a new builder draft clears them
+    const verdicts = new Map();
     const turns = []; let approved = false, r = 1, failures = 0;
     say("RELAY", null, "New task on the board! Everyone, places.");
     try {
       for (; r <= rounds; r++) {
         scene.setRound(r);
-        const verdicts = [];
-        for (let i = 0; i < team.length; i++) {
-          const a = team[i];
+        // approved the moment every judge on duty this round has signed off on the latest draft (a judge who errored hasn't)
+        const onDuty = crew.filter(a => a.role === "judge" && (r === 1 || a.every));
+        for (let i = 0; i < crew.length; i++) {
+          const a = crew[i];
           if (r > 1 && !a.every) continue;
           if (sig.aborted) throw new DOMException("Stopped", "AbortError");
           const npc = scene.npc(i);
@@ -612,9 +667,10 @@ a{color:var(--helper)}
             npc.bubble = "cross"; say(a.name, a.role, msg); logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, msg);
           } else {
             const text = res.text;
-            turns.push({ name: a.name, role: a.role, round: r, text }); lastSaid.set(i, text);
-            const ok = a.role === "judge" ? /^\W*APPROVED/i.test(text.split("\n")[0]) : null;
-            if (a.role === "judge") verdicts.push(ok);
+            turns.push({ name: a.name, role: a.role, round: r, text }); lastSaid.set(a, text);
+            const ok = a.role === "judge" ? isApproval(text) : null;
+            if (a.role === "builder") verdicts.clear();
+            if (a.role === "judge" && turns.some(t => t.role === "builder")) verdicts.set(a, ok);
             npc.bubble = a.role === "judge" ? (ok ? "check" : "cross") : "bang";
             scene.mark(ROLE_SHIRT[a.role]);
             say(a.name, a.role, text);
@@ -622,9 +678,9 @@ a{color:var(--helper)}
           }
           await sleep(900);
           npc.bubble = null; scene.toDesk(npc);
+          if (a.role === "judge" && onDuty.length && onDuty.every(j => verdicts.get(j) === true)) { approved = true; break; }
         }
-        const hasDraft = turns.some(t => t.role === "builder");
-        if (judges.length && hasDraft && verdicts.length === judges.length && verdicts.every(Boolean)) { approved = true; break; }
+        if (approved) break;
       }
       const draft = [...turns].reverse().find(t => t.role === "builder") || turns[turns.length - 1];
       if (!draft) throw new Error("No teammate produced a reply. Check the log.");
