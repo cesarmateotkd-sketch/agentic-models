@@ -12,7 +12,7 @@ Single-file static app (`AgentOffice.html`) on GitHub Pages, used from an iPhone
 
 ## Saved data must survive every update
 The user's keys persist across app updates only because the storage names stay the same. When changing the app:
-- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns), `skin` (`office` or `matrix`).
+- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns), `skin` (`office`, `matrix` or `tactics`).
 - Don't rename provider ids (`openrouter`, `groq`, `gemini`, `mistral`, `custom`). If a provider is removed, its saved key is parked in `connParked` and comes back if the id returns.
 - If a shape has to change, read the old one and migrate it on load, then test with data saved by the previous version (see the upgrade test below).
 - The site must stay at the same origin (`cesarmateotkd-sketch.github.io`). Moving to another domain starts with empty storage.

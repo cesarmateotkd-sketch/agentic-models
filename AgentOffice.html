@@ -143,6 +143,18 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 :root[data-skin="matrix"] canvas#office{background:#000}
 :root[data-skin="matrix"] .round-btn.b{background:#2f5bd8;border-color:#0f2a6b;box-shadow:0 4px 0 #0f2a6b}
 :root[data-skin="matrix"] .tb-arrow{color:#3cff6b}
+/* Tactics skin (PSX strategy-RPG feel): parchment menus with bronze frames over dusky stone */
+:root[data-skin="tactics"]{
+  --shell:#2a2230; --shell-dark:#17121c; --bezel:#120e16;
+  --win:#efe2bf; --win-edge:#5a3a1e; --win-inner:#c9a46a; --ink:#2e2216; --muted:#6e5a40;
+  --gold:#e8c060; --claude:#3a5aa8;
+}
+:root[data-skin="tactics"] body{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.03) 0 6px,transparent 6px 12px),repeating-linear-gradient(-45deg,rgba(0,0,0,.08) 0 6px,transparent 6px 12px)}
+:root[data-skin="tactics"] .brand{color:#c9a46a}
+:root[data-skin="tactics"] :is(input,textarea,select,button:not(.round-btn):not(.gear),.agent,.turn,.job,.hist){background:#f8f0dc}
+:root[data-skin="tactics"] canvas#office{background:#2a2230}
+:root[data-skin="tactics"] .round-btn{font-size:20px;background:#b8283a;border-color:#5a0f18;box-shadow:0 4px 0 #5a0f18}
+:root[data-skin="tactics"] .round-btn.b{background:#2c4f9e;border-color:#12244f;box-shadow:0 4px 0 #12244f}
 .gear{margin-left:auto;background:none;border:0;box-shadow:none;color:#b8b4e8;font:16px var(--px);padding:6px 8px;min-width:44px;min-height:36px}
 .gear[aria-expanded="true"]{color:var(--gold)}
 .settings{display:flex;flex-direction:column;gap:16px}
@@ -203,7 +215,7 @@ fieldset:disabled .lock{display:block}
   <section class="win">
     <h2>Skin</h2>
     <div class="stack"><label>Look of the app
-      <select id="skin"><option value="office">Office (classic)</option><option value="matrix">Matrix</option></select>
+      <select id="skin"><option value="office">Office (classic)</option><option value="matrix">Matrix</option><option value="tactics">Tactics (PSX)</option></select>
     </label></div>
   </section>
   <details class="win" id="teamPanel">
@@ -251,8 +263,9 @@ fieldset:disabled .lock{display:block}
     set(k, v){ try { localStorage.setItem("relay2." + k, JSON.stringify(v)); } catch {} }
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  let skin = store.get("skin", "office") === "matrix" ? "matrix" : "office";
-  const isMatrix = () => skin === "matrix";
+  const SKINS = ["office", "matrix", "tactics"];
+  let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
+  const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics";
   // keys and team sit behind the gear so the main screen is just the office, jobs, task, log and history
   function openSettings(panel, quiet){
     $("settings").hidden = false; $("gear").setAttribute("aria-expanded", "true");
@@ -485,9 +498,17 @@ fieldset:disabled .lock{display:block}
   const AGENT = BODY.map((row, y) => y === 4 ? ".OSKKKKKKSO." : y === 8 ? "..OCWWWWCO.." : y === 9 ? ".OCCCDDCCCO." : row);
   const NEO = BODY.map((row, y) => y === 4 ? ".OSKKSSKKSO." : y === 12 ? "..OCCCCCCO.." : y === 13 ? "..OCPOOPCO.." : row);
   const MINI_AGENT = MINI.map((row, y) => y === 2 ? "OSKKKSO" : row);
+  // Tactics skin: judges are Knights (visored helm), builders Black Mages (wide hat, shadowed face, glowing eyes), helpers White Mages (trimmed hood)
+  const KNIGHT = BODY.map((row, y) => [ "...OOOOOO...", "..OHHHHHHO..", ".OHHHHHHHHO.", ".OHKKKKKKHO.", ".OSESSSSESO." ][y] || (y === 9 ? ".OCCCDDCCCO." : row));
+  const BMAGE = BODY.map((row, y) => [ "....OOOO....", "...OHHHHO...", "..OHHHHHHO..", "OHHHHHHHHHHO", ".OKYKKKKYKO.", ".OKKKKKKKKO.", "..OKKKKKKO.." ][y] || row);
+  const WMAGE = BODY.map((row, y) => [ "...OOOOOO...", "..OWWWWWWO..", ".OWRWWWWRWO.", ".OWSSSSSSWO.", ".OWESSSSEWO." ][y] || (y === 11 ? "..ORCCCCRO.." : row));
   const shade = (hex, f) => "#" + [1, 3, 5].map(i => Math.max(0, Math.min(255, Math.round(parseInt(hex.substr(i, 2), 16) * f))).toString(16).padStart(2, "0")).join("");
+  const JOBS = { judge: { kind: "knight", hair: "#9aa4ae", shirt: "#7e8a96", tie: "#b8283a" },
+                 builder: { kind: "bmage", hair: "#c9a35a", shirt: "#3a4a8a", tie: "#232d5a" },
+                 helper: { kind: "wmage", hair: "#efe9dc", shirt: "#e8e2d2", tie: "#b8283a" } };
   const palFor = a => isMatrix()
     ? { kind: "agent", hair: shade(HAIRS[a.hair % HAIRS.length], .35), shirt: "#1e2326", tie: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper }
+    : isTactics() ? JOBS[a.role] || JOBS.helper
     : { hair: HAIRS[a.hair % HAIRS.length], shirt: ROLE_SHIRT[a.role] || ROLE_SHIRT.helper };
   const spriteCache = {};
   function sprite(pal, frame, mini){
@@ -495,9 +516,11 @@ fieldset:disabled .lock{display:block}
     if (spriteCache[k]) return spriteCache[k];
     const c = document.createElement("canvas"); c.width = mini ? 7 : 12; c.height = mini ? 9 : 15;
     const x = c.getContext("2d");
-    const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: pal.tie || shade(pal.shirt, .7), P: "#485878", B: "#283040", K: "#050505", W: "#e8ece8" };
-    if (pal.kind) Object.assign(map, { O: "#0b0f0c", P: pal.kind === "neo" ? "#0b0b0b" : "#16191b", B: "#000" });
-    const rows = mini ? (pal.kind ? MINI_AGENT : MINI) : pal.kind === "neo" ? NEO : pal.kind ? AGENT : BODY;
+    const map = { O: "#283040", H: pal.hair, S: "#f8c8a0", E: "#283040", C: pal.shirt, D: pal.tie || shade(pal.shirt, .7), P: "#485878", B: "#283040", K: "#050505", W: "#e8ece8", Y: "#f8e048", R: "#b8283a" };
+    if (pal.kind === "agent" || pal.kind === "neo") Object.assign(map, { O: "#0b0f0c", P: pal.kind === "neo" ? "#0b0b0b" : "#16191b", B: "#000" });
+    if (["knight", "bmage", "wmage"].includes(pal.kind)) Object.assign(map, { O: "#2a1e14", P: "#5a4430", B: "#3a2a1a", K: "#14101a", W: pal.hair });
+    const rows = mini ? (pal.kind === "agent" ? MINI_AGENT : MINI)
+      : ({ neo: NEO, agent: AGENT, knight: KNIGHT, bmage: BMAGE, wmage: WMAGE })[pal.kind] || BODY;
     (mini ? [...rows, MINI_FEET[frame]] : [...rows, FEET[frame]]).forEach((row, y) => [...row].forEach((ch, xx) => { if (map[ch]) { x.fillStyle = map[ch]; x.fillRect(xx, y, 1, 1); } }));
     return spriteCache[k] = c;
   }
@@ -536,7 +559,10 @@ fieldset:disabled .lock{display:block}
     }
     const CLAUDE_SPOT = { x: 82, y: 46 }, CLAUDE_BOARD = { x: 104, y: 46 };
     const CLAUDE_PAL = { hair: "#efe6d6", shirt: "#d97757" }, NEO_PAL = { kind: "neo", hair: "#0d0d0d", shirt: "#0e0e0e", tie: "#1c1c1c" };
+    const HERO_PAL = { hair: "#e8c050", shirt: "#3a5aa8", tie: "#d8b040" }; // Tactics: a blond squire-hero in blue with a gold sash
+    const claudePal = () => isMatrix() ? NEO_PAL : isTactics() ? HERO_PAL : CLAUDE_PAL;
     const claude = { x: CLAUDE_SPOT.x, y: CLAUDE_SPOT.y, path: [], resolve: null, bubble: null, away: false, idx: 99, home: { desk: false }, pal: isMatrix() ? NEO_PAL : CLAUDE_PAL, agent: null, show: false };
+    claude.pal = claudePal();
     // interns work at a side table right of the whiteboard: a part of the floor no desk or aisle uses
     const INTERN_SPOTS = [{ x: 166, y: 57 }, { x: 178, y: 59 }, { x: 190, y: 57 }];
     let interns = [];
@@ -557,7 +583,7 @@ fieldset:disabled .lock{display:block}
     }
     function spawnInterns(owner, agents){
       interns = agents.map((ag, k) => ({ x: owner.x + (k - 1) * 4, y: owner.y + 3, path: [], resolve: null, bubble: "dots", away: true, mini: true, idx: 50 + k,
-        home: { desk: false }, agent: ag, pal: { hair: HAIRS[(owner.agent.hair + k + 1) % HAIRS.length], shirt: owner.pal.shirt } }));
+        home: { desk: false }, agent: ag, pal: Object.assign({ hair: HAIRS[(owner.agent.hair + k + 1) % HAIRS.length], shirt: owner.pal.shirt }, skin === "office" ? {} : internPal()) }));
       return { npcs: interns.slice(), arrived: Promise.all(interns.map((n, k) => walk(n, [{ x: n.x, y: 56 }, { x: INTERN_SPOTS[k].x, y: 56 }, INTERN_SPOTS[k]]))) };
     }
     async function internsBack(){
@@ -570,7 +596,7 @@ fieldset:disabled .lock{display:block}
     function celebrate(){
       npcs.forEach(n => n.bubble = "star");
       if (reduce) return;
-      const cols = isMatrix() ? ["#c8ffd2", "#3cff6b", "#1fa83f", "#8dffa6", "#0f7a2a"] : ["#f8c838", "#d84890", "#4878e8", "#30a860", "#f0a030"];
+      const cols = isMatrix() ? ["#c8ffd2", "#3cff6b", "#1fa83f", "#8dffa6", "#0f7a2a"] : isTactics() ? ["#e8c060", "#b8283a", "#7ad0ff", "#efe2bf", "#2c4f9e"] : ["#f8c838", "#d84890", "#4878e8", "#30a860", "#f0a030"];
       for (let i = 0; i < 70; i++) confetti.push({ x: 120, y: 30, vx: (Math.random() - .5) * 140, vy: -Math.random() * 90 - 20, c: cols[i % 5], life: 2.2 });
       setTimeout(() => npcs.forEach(n => { if (n.bubble === "star") n.bubble = null; }), 3500);
     }
@@ -608,8 +634,49 @@ fieldset:disabled .lock{display:block}
       R(x, y - 3, 8, 18, "#0b0f0c"); R(x + 1, y - 2, 6, 16, "#1a201b");
       for (let i = 0; i < 4; i++) { R(x + 2, y + i * 4, 4, 1, "#2a322b"); R(x + 5, y + i * 4 + 1, 1, 1, (Math.floor(t * 2 + i + x) % 3) ? "#3cff6b" : "#0f3a18"); }
     }
+    // Tactics: a stone war room; light falls through stained glass onto beveled floor tiles
+    function roomTactics(){
+      for (let y = 28; y < 160; y += 8) for (let x = 0; x < 240; x += 8) {
+        const odd = ((x + y) / 8) % 2;
+        R(x, y, 8, 8, odd ? "#8a7a62" : "#7f705a"); R(x, y, 8, 1, odd ? "#9a8a70" : "#8f7f66"); R(x, y + 7, 8, 1, "#665a48");
+      }
+      R(0, 0, 240, 26, "#5a4e44");
+      for (let y = 0; y < 24; y += 6) for (let x = (y / 6) % 2 ? 0 : 8; x < 240; x += 16) R(x, y, 1, 6, "#463c34");
+      for (let y = 5; y < 24; y += 6) R(0, y, 240, 1, "#463c34");
+      R(0, 24, 240, 4, "#3a3029"); R(0, 24, 240, 1, "#8a7a62");
+      [[10, 46], [184, 46]].forEach(([wx, ww]) => {
+        R(wx - 2, 4, ww + 4, 18, "#2a2220"); R(wx, 5, ww, 16, "#1c2a4a");
+        const panes = ["#b8283a", "#2c4f9e", "#e8c060", "#3a8a5a"];
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) R(wx + 2 + i * 11, 7 + j * 7, 9, 5, panes[(i + j) % 4]);
+        R(wx + ww / 2 - 1, 5, 2, 16, "#2a2220");
+        const glow = .06 + .03 * Math.sin(t * 1.2 + wx);
+        ctx.fillStyle = "rgba(255,236,190," + glow.toFixed(3) + ")";
+        ctx.beginPath(); ctx.moveTo(wx, 26); ctx.lineTo(wx + ww, 26); ctx.lineTo(wx + ww + 30, 80); ctx.lineTo(wx + 30, 80); ctx.closePath(); ctx.fill();
+      });
+      // the war map on an easel replaces the whiteboard
+      R(90, 3, 60, 22, "#3a2a1a"); R(91, 4, 58, 20, "#6b4a2a"); R(92, 5, 56, 18, "#d8c08a");
+      R(120, 13, 22, 8, "#9ab070"); R(126, 9, 12, 6, "#8aa060"); R(99, 17, 12, 5, "#9ab070");
+      ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#3a2a1a";
+      ctx.fillText(round ? "R" + round : "ORDERS", 95, 7);
+      marks.slice(-14).forEach((c, i) => R(95 + (i % 7) * 7, 16 + Math.floor(i / 7) * 3, 5, 2, i % 2 ? "#b8283a" : "#2c4f9e"));
+      // a crest where the clock was
+      R(162, 5, 12, 13, "#3a2a1a"); R(163, 6, 10, 10, "#2c4f9e"); R(167, 6, 2, 10, "#e8c060"); R(163, 10, 10, 2, "#e8c060"); R(165, 16, 6, 2, "#2c4f9e");
+      R(100, 32, 40, 18, "#5a0f18"); R(102, 34, 36, 14, "#8a1c2a"); R(103, 35, 34, 1, "#e8c060"); R(103, 46, 34, 1, "#e8c060");
+      torch(6, 30); torch(226, 30); torch(4, 140); torch(228, 140);
+      R(159, 35, 36, 12, "#3a2a1a"); R(160, 36, 34, 5, "#8a5a32"); R(160, 41, 34, 5, "#6b4424");
+      R(164, 37, 8, 3, "#efe2bf"); R(178, 37, 6, 3, "#efe2bf"); R(188, 35, 3, 5, "#7ad0ff");
+      // a glowing crystal where the water cooler was
+      const sh = Math.floor(t * 3) % 3;
+      R(64, 30, 6, 4, "#3a3029"); R(65, 14, 4, 16, "#4aa0e0"); R(64, 18, 6, 8, "#7ad0ff"); R(66, 15 + sh * 4, 2, 3, "#e8f8ff");
+    }
+    function torch(x, y){
+      R(x + 3, y, 2, 15, "#3a2a1a"); R(x + 1, y + 13, 6, 2, "#3a2a1a"); R(x + 2, y - 1, 4, 2, "#5a4430");
+      const f = Math.floor(t * 8) % 3;
+      R(x + 2, y - 5 + (f === 1 ? 1 : 0), 4, 4, "#f08030"); R(x + 3, y - 7 + f % 2, 2, 3, "#f8e048");
+    }
     function room(){
       if (isMatrix()) return roomMatrix();
+      if (isTactics()) return roomTactics();
       for (let y = 28; y < 160; y += 8) for (let x = 0; x < 240; x += 8) R(x, y, 8, 8, ((x + y) / 8) % 2 ? "#e4d0a4" : "#dcc494");
       for (let y = 28; y < 160; y += 16) R(0, y, 240, 1, "#ccb07e");
       R(0, 0, 240, 26, "#9cc4e4"); R(0, 0, 240, 3, "#7aa4cc"); R(0, 24, 240, 4, "#58789c");
@@ -634,6 +701,13 @@ fieldset:disabled .lock{display:block}
     function plant(x, y){ R(x, y + 8, 8, 7, "#283040"); R(x + 1, y + 9, 6, 5, "#b85c38"); R(x, y, 8, 9, "#2e8a40"); R(x + 2, y - 3, 4, 5, "#48b058"); R(x + 1, y + 2, 2, 2, "#68d070"); }
     function desk(s, busy){
       const x = s.dx - 14, y = s.dtop;
+      if (isTactics()) {
+        R(x - 1, y - 1, 30, 14, "#2a1e14"); R(x, y, 28, 4, "#8a5a32"); R(x, y + 4, 28, 8, "#6b4424"); R(x + 2, y + 6, 24, 1, "#4a2e18");
+        // a lectern with an open tome instead of a monitor; the pages glow while its owner works
+        R(s.dx + 7, y - 3, 3, 3, "#3a2a1a"); R(s.dx + 3, y - 9, 11, 7, "#3a2a1a");
+        R(s.dx + 4, y - 8, 4, 5, busy ? (Math.floor(t * 3) % 2 ? "#fff6d8" : "#efe2bf") : "#c9b48a"); R(s.dx + 9, y - 8, 4, 5, busy ? "#efe2bf" : "#c9b48a");
+        return;
+      }
       if (isMatrix()) {
         R(x - 1, y - 1, 30, 14, "#0b0f0c"); R(x, y, 28, 4, "#2a322b"); R(x, y + 4, 28, 8, "#1a201b"); R(x + 2, y + 6, 24, 1, "#10140f");
         R(s.dx + 3, y - 9, 11, 9, "#0b0f0c"); R(s.dx + 4, y - 8, 9, 6, "#021a08");
@@ -645,7 +719,7 @@ fieldset:disabled .lock{display:block}
       R(s.dx + 3, y - 9, 11, 9, "#283040"); R(s.dx + 4, y - 8, 9, 6, busy ? (Math.floor(t * 3) % 2 ? "#78e0ff" : "#58c8f8") : "#3a5878"); R(s.dx + 7, y - 2, 3, 2, "#283040");
     }
     function bubble(x, y, type){
-      const bx = x - 7, by = y - 27, m = isMatrix(), edge = m ? "#3cff6b" : "#283040", fill = m ? "#021a08" : "#fff";
+      const bx = x - 7, by = y - 27, m = isMatrix(), edge = m ? "#3cff6b" : isTactics() ? "#3a2a1a" : "#283040", fill = m ? "#021a08" : isTactics() ? "#f0e2bc" : "#fff";
       R(bx - 1, by - 1, 16, 12, edge); R(bx, by, 14, 10, fill); R(x - 1, by + 10, 3, 2, edge); R(x, by + 10, 1, 1, fill);
       if (type === "dots") { const n = Math.floor(t * 3) % 4; for (let i = 0; i < n; i++) R(bx + 3 + i * 3, by + 6, 2, 2, m ? "#3cff6b" : "#283040"); }
       else if (type === "bang") { R(x - 1, by + 2, 2, 4, "#d83838"); R(x - 1, by + 7, 2, 1, "#d83838"); }
@@ -701,14 +775,16 @@ fieldset:disabled .lock{display:block}
     }
     function setClaude(agent){ claude.agent = agent; claude.show = !!agent; if (!agent) { claude.path = []; claude.x = CLAUDE_SPOT.x; claude.y = CLAUDE_SPOT.y; } }
     // re-dress everyone for the current skin; positions and paths don't change
-    function reskin(){ npcs.forEach(n => n.pal = palFor(n.agent)); interns.forEach(n => n.pal = Object.assign({}, n.pal, isMatrix() ? { kind: "agent", shirt: "#1e2326", tie: n.pal.tie || n.pal.shirt } : { kind: undefined, tie: undefined })); claude.pal = isMatrix() ? NEO_PAL : CLAUDE_PAL; }
+    function reskin(){ npcs.forEach(n => n.pal = palFor(n.agent)); interns.forEach(n => n.pal = Object.assign({}, n.pal, internPal())); claude.pal = claudePal(); }
+    // interns: suits in the Matrix, squire tunics in Tactics
+    const internPal = () => isMatrix() ? { kind: "agent", shirt: "#1e2326", tie: "#3cff6b" } : isTactics() ? { kind: undefined, shirt: "#b08a50", tie: "#6b4424" } : { kind: undefined, tie: undefined };
     return { reskin, spawnInterns, internsBack, setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
   })();
 
   /* ================= dialogue box ================= */
   let typer = null, typedFull = "";
   // in the Matrix skin the narrator is the Operator and Claude is Neo
-  const showName = name => isMatrix() ? (name === "RELAY" ? "OPERATOR" : name === "Claude" ? "NEO" : name) : name;
+  const showName = name => isMatrix() ? (name === "RELAY" ? "OPERATOR" : name === "Claude" ? "NEO" : name) : isTactics() && name === "RELAY" ? "NARRATOR" : name;
   function say(name, role, text){
     $("tbName").textContent = showName(name).toUpperCase();
     $("tbName").style.setProperty("--c", role ? `var(--${role})` : "var(--ink)");
@@ -1321,14 +1397,17 @@ fieldset:disabled .lock{display:block}
   function showClaude(){ scene.setClaude(inboxReady() || isMatrix() ? CLAUDE : null); }
   function applySkin(){
     document.documentElement.dataset.skin = skin;
-    document.querySelector(".brand").innerHTML = isMatrix() ? "AI RELAY <b>MATRIX</b>" : "AI RELAY <b>OFFICE</b>";
-    document.querySelector('meta[name="theme-color"]').content = isMatrix() ? "#020a04" : "#3f3b8f";
+    document.querySelector(".brand").innerHTML = "AI RELAY <b>" + (({ matrix: "MATRIX", tactics: "TACTICS" })[skin] || "OFFICE") + "</b>";
+    document.querySelector('meta[name="theme-color"]').content = ({ matrix: "#020a04", tactics: "#2a2230" })[skin] || "#3f3b8f";
+    $("run").textContent = isTactics() ? "○" : "A"; $("stop").textContent = isTactics() ? "×" : "B";
     $("skin").value = skin;
     scene.reskin(); showClaude(); renderTeam();
   }
   $("skin").addEventListener("change", () => {
-    skin = $("skin").value === "matrix" ? "matrix" : "office"; store.set("skin", skin); applySkin();
-    say("RELAY", null, isMatrix() ? "Welcome to the real world. Same team, same jobs. Neo is here when you need Claude." : "Back to the office!");
+    skin = SKINS.includes($("skin").value) ? $("skin").value : "office"; store.set("skin", skin); applySkin();
+    say("RELAY", null, isMatrix() ? "Welcome to the real world. Same team, same jobs. Neo is here when you need Claude."
+      : isTactics() ? "The war council gathers. Knights judge, Black Mages write, White Mages advise. Press ○ to begin."
+      : "Back to the office!");
   });
 
   /* ================= boot ================= */
