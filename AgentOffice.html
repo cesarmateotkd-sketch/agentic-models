@@ -301,7 +301,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.1";
+  const APP_VERSION = "2026-10-28.2";
   const SKINS = ["office", "matrix", "tactics"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics";
@@ -1021,6 +1021,8 @@ fieldset:disabled .lock{display:block}
     const m = /try again in\s+(?:(\d+)m)?\s*([\d.]+)\s*(ms|s)\b/i.exec(msg || "");
     if (m) e.retryAfter = (+(m[1] || 0)) * 60 + (m[3].toLowerCase() === "ms" ? +m[2] / 1000 : +m[2]);
     else if (/high demand|overloaded|temporarily unavailable/i.test(msg || "")) e.retryAfter = 8;
+    // a bare per-second limit (Mistral's free plan says only "Rate limit exceeded") clears in a moment; daily quotas don't
+    else if (status === 429 && /^\s*rate limit exceeded\.?\s*$/i.test(msg || "")) e.retryAfter = 6;
     return e;
   }
 
@@ -1113,12 +1115,27 @@ fieldset:disabled .lock{display:block}
     let r;
     try { r = await fetch(url); } catch { throw new Error("Couldn't load " + url + ". The image host must allow it; GitHub Pages links work."); }
     if (!r.ok) throw new Error("Couldn't load " + url + " (HTTP " + r.status + ").");
-    const blob = await r.blob();
+    let blob = await r.blob();
     if (blob.size > 5e6) throw new Error("Image too big (over 5 MB): " + url);
+    // send a smaller JPEG copy (long side 1024px): far fewer tokens against free rate limits; the real size goes in the prompt
+    let w = 0, h = 0;
+    try {
+      const bmp = await createImageBitmap(blob);
+      w = bmp.width; h = bmp.height;
+      const k = Math.min(1, IMG_MAX / Math.max(w, h));
+      if (k < 1 || blob.size > 400e3) {
+        const cv = el("canvas", { width: Math.round(w * k), height: Math.round(h * k) });
+        const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(bmp, 0, 0, cv.width, cv.height);
+        const small = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.85));
+        if (small && small.size < blob.size) blob = small;
+      }
+      bmp.close?.();
+    } catch {}
     const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
     const [, mime, b64] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl) || [];
-    return { mime: (mime && mime !== "application/octet-stream") ? mime : (/\.png/i.test(url) ? "image/png" : /\.webp/i.test(url) ? "image/webp" : "image/jpeg"), b64 };
+    return { mime: (mime && mime !== "application/octet-stream") ? mime : (/\.png/i.test(url) ? "image/png" : /\.webp/i.test(url) ? "image/webp" : "image/jpeg"), b64, w, h };
   }
+  const IMG_MAX = 1024;
 
   /* ================= interns (one level of delegation) ================= */
   const INTERN_PROMPT = "Do only the sub-task you're given, for the teammate who asked. Be concise and concrete. No preamble.";
@@ -1262,7 +1279,8 @@ Every recommendation must say why: the target search phrase and intent, the data
     // verdicts only count for the current draft: a new builder draft clears them
     const verdicts = new Map();
     const turns = [], skipped = []; let approved = false, r = 1, failures = 0, calls = 0;
-    const ask = (ag, prompt) => { calls++; return callAgent(ag, prompt, sig, ag.vision ? images : null); };
+    const sizes = () => images?.length && images.some(im => im.w) ? "\n\nORIGINAL IMAGE SIZES (sent to you scaled down, so judge size from these): " + images.map((im, k) => "image " + (k + 1) + ": " + (im.w ? im.w + "×" + im.h : "unknown")).join(", ") + "." : "";
+    const ask = (ag, prompt) => { calls++; return callAgent(ag, ag.vision ? prompt + sizes() : prompt, sig, ag.vision ? images : null); };
     const settle = p => p.then(text => ({ text }), err => ({ err }));
     // One teammate's turn. With delegation on and calls to spare, the first reply may be DELEGATE plus sub-tasks:
     // interns run them in parallel (interns never delegate), then the teammate answers again with their notes.
