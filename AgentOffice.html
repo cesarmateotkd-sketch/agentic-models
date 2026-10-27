@@ -129,6 +129,16 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 .intern-note pre{font-size:15px}
 .subbox{border:2px dashed var(--win-inner);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:10px}
 .subbox h3{margin:0;font:9px/1.5 var(--px)}
+[hidden]{display:none!important}
+.gear{margin-left:auto;background:none;border:0;box-shadow:none;color:#b8b4e8;font:16px var(--px);padding:6px 8px;min-width:44px;min-height:36px}
+.gear[aria-expanded="true"]{color:var(--gold)}
+.settings{display:flex;flex-direction:column;gap:16px}
+.job{border:2px solid var(--win-edge);border-left:8px solid var(--claude);border-radius:6px;padding:10px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.job b{font:9px/1.6 var(--px);font-weight:400}
+.job .row{align-items:center}
+.job.done{opacity:.6}
+.hist{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;font:15px/1.3 var(--body);box-shadow:0 2px 0 var(--win-edge);padding:8px 10px}
+.hist span{font:8px var(--px);color:var(--muted);white-space:nowrap}
 #inbox-pr{flex:0 0 76px}
 .empty{color:var(--muted);font-size:15px;text-align:center;padding:8px}
 fieldset{border:0;margin:0;padding:0;min-width:0}
@@ -140,23 +150,32 @@ fieldset:disabled .lock{display:block}
 <body>
 <main>
   <section class="bezel" aria-label="Office view">
-    <div class="bezel-top"><span class="led" id="led"></span><span class="brand">AI RELAY <b>OFFICE</b></span></div>
+    <div class="bezel-top"><span class="led" id="led"></span><span class="brand">AI RELAY <b>OFFICE</b></span><button type="button" class="gear" id="gear" aria-label="Settings: keys and team" aria-expanded="false" aria-controls="settings">⚙</button></div>
     <canvas id="office" width="240" height="160" tabindex="0" aria-label="Pixel office where your AI agents walk to the whiteboard to take their turn. Tap a teammate to read what they last said."></canvas>
   </section>
 
   <section class="win textbox" aria-live="polite">
     <div class="tb-name" id="tbName">RELAY</div>
-    <div class="tb-text" id="tbText">Welcome to the office! Add your free keys under Connections, check your team, type a task, then press START. Tap any teammate to hear what they last said.</div>
+    <div class="tb-text" id="tbText">Welcome to the office! Pick a job or a playbook, add the details, then press START. Keys and team live behind ⚙. Tap any teammate to hear what they last said.</div>
     <div class="tb-arrow" aria-hidden="true">▼</div>
+  </section>
+
+  <section class="win" id="jobsWin" hidden>
+    <h2>Jobs from Claude <span class="hint" id="jobCount"></span></h2>
+    <div class="stack" id="jobs"></div>
   </section>
 
   <form class="win" id="taskForm">
     <h2>Task</h2>
     <div class="stack">
-      <textarea id="task" aria-label="Task" placeholder="e.g. Write 3 TikTok hook ideas for an anime edit account, under 12 words each"></textarea>
+      <label>Playbook
+        <select id="playbook"></select>
+      </label>
+      <div class="small" id="pbHint"></div>
+      <textarea id="task" aria-label="Task details" placeholder="e.g. Write 3 TikTok hook ideas for an anime edit account, under 12 words each"></textarea>
       <div class="row" style="align-items:center">
-        <label style="flex:0 1 130px">Max rounds
-          <select id="rounds"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+        <label style="flex:0 1 130px" id="roundsLabel">Max rounds
+          <select id="rounds"><option>1</option><option selected>2</option><option>3</option></select>
         </label>
         <div class="controls">
           <div><button type="button" class="round-btn b" id="stop" disabled aria-label="Stop">B</button><div class="btn-label">STOP</div></div>
@@ -167,6 +186,7 @@ fieldset:disabled .lock{display:block}
     </div>
   </form>
 
+  <div class="settings" id="settings" hidden>
   <details class="win" id="teamPanel">
     <summary>Team <span class="hint" id="teamCount"></span></summary>
     <fieldset class="stack" id="teamFields">
@@ -188,11 +208,17 @@ fieldset:disabled .lock{display:block}
     <summary>Connections <span class="hint" id="connCount"></span></summary>
     <div class="stack" id="conns"></div>
   </details>
+  </div>
 
   <section class="win">
     <h2>Log</h2>
     <div id="track"><div class="empty">Every turn gets written down here.</div></div>
   </section>
+
+  <details class="win" id="historyWin">
+    <summary>History <span class="hint" id="histCount"></span></summary>
+    <div class="stack" id="history"></div>
+  </details>
 </main>
 
 <script>
@@ -206,6 +232,16 @@ fieldset:disabled .lock{display:block}
     set(k, v){ try { localStorage.setItem("relay2." + k, JSON.stringify(v)); } catch {} }
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // keys and team sit behind the gear so the main screen is just the office, jobs, task, log and history
+  function openSettings(panel, quiet){
+    $("settings").hidden = false; $("gear").setAttribute("aria-expanded", "true");
+    if (panel) { $(panel).open = true; if (!quiet) $(panel).scrollIntoView({ block: "start" }); }
+  }
+  $("gear").onclick = () => {
+    const show = $("settings").hidden;
+    $("settings").hidden = !show; $("gear").setAttribute("aria-expanded", String(show));
+    if (show) $("settings").scrollIntoView({ block: "start" });
+  };
 
   /* ================= providers ================= */
   const PROVIDERS = {
@@ -327,7 +363,8 @@ fieldset:disabled .lock{display:block}
   let team = store.get("team4", null) || DEFAULT_TEAM();
   // delegation is off for OpenRouter teammates by default: its free models allow only about 50 requests a day
   team.forEach((a, i) => { if (a.hair == null) a.hair = i % HAIRS.length; if (!a.title) a.title = a.role; if (a.delegate == null) a.delegate = a.provider !== "openrouter"; });
-  const internCfg = Object.assign({ provider: "groq", model: "openai/gpt-oss-120b", budget: 30 }, store.get("interns", {}));
+  // interns are off unless switched on: three parallel calls easily hit Groq's free per-minute token limit
+  const internCfg = Object.assign({ enabled: false, provider: "groq", model: "openai/gpt-oss-120b", budget: 30 }, store.get("interns", {}));
   const saveInterns = () => store.set("interns", internCfg);
   function renderInterns(){
     const box = $("internBox"); box.textContent = "";
@@ -340,8 +377,11 @@ fieldset:disabled .lock{display:block}
     const budget = el("select", { id: "int-budget" });
     [10, 20, 30, 50, 80].forEach(n => budget.appendChild(el("option", { value: n, textContent: n, selected: internCfg.budget === n })));
     budget.addEventListener("change", () => { internCfg.budget = +budget.value; saveInterns(); });
+    const on = el("input", { type: "checkbox", checked: !!internCfg.enabled, id: "int-on" });
+    on.addEventListener("change", () => { internCfg.enabled = on.checked; saveInterns(); });
     box.append(
       el("h3", { textContent: "Interns" }),
+      el("label", { className: "check" }, on, "Use interns (off saves free quota)"),
       el("div", { className: "small", textContent: "Teammates with “Can hand work to interns” may split their turn into up to 3 sub-tasks. Interns run at the same time on the model below, then the teammate writes its turn with their notes. If that provider has no key, interns use the teammate's own model." }),
       el("div", { className: "row" }, el("label", {}, "Interns use", prov), el("label", {}, "Max calls per run", budget)),
       el("label", {}, "Intern model", model),
@@ -616,19 +656,34 @@ fieldset:disabled .lock{display:block}
   const CALL_TIMEOUT = 180000;
   const stripThink = t => String(t).replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim();
   // AbortSignal.any() is too new for older iPhones, so link the run's signal to a per-call timeout by hand
-  async function callAgent(a, userMsg, runSignal){
+  // iOS suspends a home-screen app seconds after it leaves the screen, which kills in-flight fetches.
+  // A call that failed with a network error while the app was hidden gets one retry once it's visible again.
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => { if (document.hidden) hiddenAt = Date.now(); });
+  const whenVisible = () => document.hidden ? new Promise(res => { const f = () => { if (!document.hidden) { document.removeEventListener("visibilitychange", f); res(); } }; document.addEventListener("visibilitychange", f); }) : Promise.resolve();
+  async function callAgent(a, userMsg, runSignal, images){
+    for (let attempt = 0; ; attempt++) {
+      const started = Date.now();
+      try { return await callAgentAttempt(a, userMsg, runSignal, images); }
+      catch (e) {
+        if (attempt === 0 && isNetErr(e) && !runSignal.aborted && hiddenAt >= started) { await whenVisible(); continue; }
+        throw e;
+      }
+    }
+  }
+  async function callAgentAttempt(a, userMsg, runSignal, images){
     const ctl = new AbortController();
     const onAbort = () => ctl.abort();
     if (runSignal.aborted) ctl.abort(); else runSignal.addEventListener("abort", onAbort);
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, CALL_TIMEOUT);
-    try { return await callAgentOnce(a, userMsg, ctl.signal); }
+    try { return await callAgentOnce(a, userMsg, ctl.signal, images); }
     catch (e) {
       if (timedOut && !runSignal.aborted) throw new Error(a.name + " took longer than " + CALL_TIMEOUT / 60000 + " minutes to answer.");
       throw e;
     } finally { clearTimeout(timer); runSignal.removeEventListener("abort", onAbort); }
   }
-  async function callAgentOnce(a, userMsg, signal){
+  async function callAgentOnce(a, userMsg, signal, images){
     const P = PROVIDERS[a.provider], c = conn[a.provider];
     if (!c.key && a.provider !== "custom") throw new Error("No " + P.name + " key. Add it under Connections.");
     if (!c.base && !P.base) throw new Error("No base URL for " + P.name + ". Add it under Connections.");
@@ -638,7 +693,7 @@ fieldset:disabled .lock{display:block}
     if (P.kind === "gemini") {
       r = await fetch(base + "/models/" + encodeURIComponent(a.model) + ":generateContent?key=" + encodeURIComponent(c.key), {
         method: "POST", signal, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: userMsg }] }] })
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: userMsg }, ...(images || []).map(im => ({ inlineData: { mimeType: im.mime, data: im.b64 } }))] }] })
       });
       try { j = await r.json(); } catch {}
       if (!r.ok) throw httpErr(a, r.status, j?.error?.message);
@@ -651,7 +706,8 @@ fieldset:disabled .lock{display:block}
     if (a.provider === "openrouter") headers["X-Title"] = "AI Relay";
     r = await fetch(base + "/chat/completions", {
       method: "POST", signal, headers,
-      body: JSON.stringify({ model: a.model, messages: [{ role: "system", content: system }, { role: "user", content: userMsg }] })
+      body: JSON.stringify({ model: a.model, messages: [{ role: "system", content: system }, { role: "user", content: images?.length
+        ? [{ type: "text", text: userMsg }, ...images.map(im => ({ type: "image_url", image_url: { url: "data:" + im.mime + ";base64," + im.b64 } }))] : userMsg }] })
     });
     try { j = await r.json(); } catch {}
     if (!r.ok) throw httpErr(a, r.status, j?.error?.message || j?.message);
@@ -681,6 +737,78 @@ fieldset:disabled .lock{display:block}
       : a.role === "judge" ? (lastDraftIdx < 0 ? "There is no draft yet. Say what the builder must get right." : "Judge the latest draft. First line APPROVED if it is ready; otherwise list the problems.")
       : "Add your input for round " + round + ".";
     return "TASK:\n" + task + (ctx ? "\n\nTEAM SO FAR:\n" + ctx : "") + "\n\nYOUR TURN (" + a.name + "): " + ask;
+  }
+
+  /* ================= playbooks ================= */
+  // Fixed team + task template + checklist judge for Strand's repeat jobs. "Custom" runs the team from Settings.
+  const BRAND_RULES = "STRAND RULES (hairtypequiz.hair): evidence-led and specific. Never invent studies, PMIDs, ratings, star counts, review counts or prices. Anything without a real source is marked \"not studied\". No cure, miracle or guaranteed-results claims. No \"you/your hair\" personal-attribute framing in ads. Plain, warm, expert tone.";
+  const CHECK_JUDGE = "Check the latest draft against every requirement and rule in the task, one line each: PASS or FAIL, quoting the exact words that fail and how to fix them. Length, formatting and a confident tone are not signs of quality. If every line passes, write APPROVED on the first line; otherwise write REVISE on the first line.";
+  const pbAgent = (name, title, role, provider, model, hair, prompt, extra) => Object.assign({ name, title, role, provider, model, every: true, hair, prompt, delegate: false }, extra);
+  const GEMMA = (title, role, prompt, extra) => pbAgent("Gemma", title, role, "gemini", "gemini-3.8-flash", 1, prompt, extra);
+  const REX = (title, role, prompt) => pbAgent("Rex", title, role, "groq", "openai/gpt-oss-120b", 3, prompt);
+  const PLAYBOOKS = {
+    pins: { label: "Pin batch", rounds: 2,
+      hint: "Name the post (title and link) and how many pins you want (5–7).",
+      placeholder: "e.g. 6 pins for “Silk press on 4C hair at home” https://hairtypequiz.hair/blog/silk-press-4c-hair-at-home.html",
+      brief: "DELIVERABLE: Pinterest pins for the post above, numbered. For each pin: ANGLE (every pin a genuinely different angle), TITLE (max 100 characters, main keyword in the first 40), DESCRIPTION (max 500 characters, natural keywords, no hashtag stuffing), TEXT OVERLAY (max 6 words), ALT TEXT.",
+      crew: [GEMMA("Pin writer", "builder", "Write pin copy that is specific and useful, not clickbait. When there is feedback, return the full revised batch."), REX("Pin checker", "judge", CHECK_JUDGE)] },
+    outline: { label: "Post outline", rounds: 2,
+      hint: "Give the topic and the search phrase you want to rank for. Add notes or links if you have them.",
+      placeholder: "e.g. Best curl creams for type 4 hair. Target: “best curl cream for 4c hair”. Link from best-curl-creams-natural-hair.",
+      brief: "DELIVERABLE: a blog post outline with: SEO TITLE (max 60 characters), META DESCRIPTION (max 155), H1, INTRO HOOK (2–3 sentences), H2/H3 structure with one line on what each section covers, a QUICK PICKS block if it's a roundup (Best for + a data column taken from the post's own evidence, no prices), an EVIDENCE PLAN listing each claim with the study to cite or \"not studied\", 3–5 FAQ questions, 3 INTERNAL LINK ideas to existing Strand posts, and where the affiliate disclosure goes (right next to the first product link).",
+      crew: [GEMMA("Outliner", "builder", "Outline posts that answer the searcher's question fast and prove claims with evidence. Return the full outline every time."), REX("Outline checker", "judge", CHECK_JUDGE)] },
+    factcheck: { label: "Fact-check", rounds: 1,
+      hint: "Paste the text to check. The team flags claims; Claude verifies the flagged ones against PubMed before anything is published.",
+      placeholder: "Paste a draft, intro, pin or caption here.",
+      brief: "DELIVERABLE: a numbered claim-by-claim fact-check of the text above: CLAIM, VERDICT (LIKELY TRUE / NEEDS A SOURCE / LIKELY WRONG), WHY (one line), and HOW TO VERIFY (a PubMed search phrase or the kind of source that would settle it). Never cite a specific study, PMID or DOI unless the text already gives it.",
+      crew: [GEMMA("Claim finder", "helper", "List every factual claim in the text as short, checkable, numbered statements. Don't judge them yet."),
+             REX("Fact checker", "builder", "Assess each claim honestly. Without a real source in front of you, say what to search for instead of naming a study.")] },
+    compliance: { label: "Compliance check", rounds: 2,
+      hint: "Paste a post section, pin, Facebook post, ad or email, and say where it will be published.",
+      placeholder: "e.g. Facebook ad: “Struggling with dry 4C hair? This cream fixes it in 7 days…”",
+      brief: "DELIVERABLE: a compliance check of the text above, one line per rule: PASS / FAIL / N/A, quoting the failing words and giving a fix. RULES — FTC: plain-words affiliate disclosure close to the first product link (e.g. \"I earn a commission if you buy through links in this post\"), not only in a footer. AMAZON ASSOCIATES: no prices, star ratings or review counts unless pulled from Amazon's API; no shortened or cloaked Amazon links; no Amazon links in printables, PDFs or emails people didn't opt into. PINTEREST: no cure, miracle or medically unsupported claims; no keyword stuffing; no near-duplicate pins. META ADS: no \"you/your hair\" personal-attribute framing; nothing implying someone's appearance is inferior; no promised results within a time frame; no health claims.",
+      crew: [REX("Compliance checker", "builder", "Apply each rule literally and quote the exact words. If a rule doesn't apply to this format, say N/A."),
+             GEMMA("Second check", "judge", CHECK_JUDGE)] },
+    visual: { label: "Visual brief", rounds: 2,
+      hint: "Name the post or pin topic. Claude builds the winning concept in Canva, then you can run Pin critique on it.",
+      placeholder: "e.g. Pin for “Silk press on 4C hair at home” — evidence angle: heat damage temperatures.",
+      brief: "DELIVERABLE: 3 different pin concepts, numbered. For each: ANGLE, HEADLINE OVERLAY (max 6 words, readable on a phone), SUBHEAD (optional, max 8 words), SCENE (what the photo shows; real natural hair, no before-and-after), LAYOUT (where the text sits), COLORS (Strand palette: espresso #3D2B1F, caramel #C4945A, cream #FAF7F2; use #8B5E1A for caramel text on light backgrounds), ALT TEXT, and a one-paragraph CANVA PROMPT. Size 1000×1500. Use straight apostrophes (') in overlay text.",
+      crew: [GEMMA("Art director", "builder", "Design concepts that stop the scroll and stay honest and on-brand. Return all 3 concepts every time."), REX("Brief checker", "judge", CHECK_JUDGE)] },
+    critique: { label: "Pin critique (image)", rounds: 1, images: true,
+      hint: "Paste 1–4 image links (PNG/JPG/WebP on GitHub Pages) and what the pins are for. Claude posts pins for review there.",
+      placeholder: "e.g. https://cesarmateotkd-sketch.github.io/agentic-models/review/post56-pin1.png — pin for the silk press post",
+      brief: "DELIVERABLE: a pass/fail review of each attached image, one line per check, quoting what fails and how to fix it: 1) headline readable at phone feed size, 2) the main message is clear at a glance, 3) Strand palette, and text on light backgrounds is dark enough to read, 4) 2:3 portrait, 1000×1500, 5) apostrophes look like normal apostrophes, not odd wedges, 6) no cure, miracle or health claims, prices or star ratings, 7) clearly different from the other images. End each image with KEEP or REDO.",
+      crew: [GEMMA("Visual critic", "builder", "Look closely at the actual images. Be specific about what you see.", { vision: true })] }
+  };
+  Object.keys(PLAYBOOKS).forEach(k => $("playbook").appendChild(el("option", { value: k, textContent: PLAYBOOKS[k].label })));
+  $("playbook").appendChild(el("option", { value: "", textContent: "Custom team (⚙ Settings)" }));
+  $("playbook").value = store.get("playbook", "pins");
+  if ($("playbook").selectedIndex < 0) $("playbook").value = "pins";
+  function onPlaybook(){
+    const pb = PLAYBOOKS[$("playbook").value];
+    store.set("playbook", $("playbook").value);
+    $("pbHint").textContent = pb ? pb.hint + " " + pb.crew.map(a => a.name + " (" + a.title + ")").join(" + ") + "." : "Runs the team you set up under ⚙ Settings.";
+    $("task").placeholder = pb ? pb.placeholder : "e.g. Write 3 TikTok hook ideas for an anime edit account, under 12 words each";
+    $("roundsLabel").hidden = !!pb;
+  }
+  $("playbook").addEventListener("change", onPlaybook);
+  const hasKey = p => p === "custom" ? !!conn.custom.base : !!conn[p]?.key;
+  // a playbook teammate whose provider has no key moves to a connected one, so a single key is enough to run any playbook
+  const buildCrew = pb => pb.crew.map(spec => {
+    if (hasKey(spec.provider)) return Object.assign({}, spec);
+    const p = ["gemini", "groq", "mistral", "openrouter"].find(hasKey);
+    return Object.assign({}, spec, p ? { provider: p, model: PROVIDERS[p].def } : {});
+  });
+  const IMG_RE = /https?:\/\/[^\s"'<>)]+?\.(?:png|jpe?g|webp)(?:\?[^\s"'<>)]*)?/gi;
+  async function loadImage(url){
+    let r;
+    try { r = await fetch(url); } catch { throw new Error("Couldn't load " + url + ". The image host must allow it; GitHub Pages links work."); }
+    if (!r.ok) throw new Error("Couldn't load " + url + " (HTTP " + r.status + ").");
+    const blob = await r.blob();
+    if (blob.size > 5e6) throw new Error("Image too big (over 5 MB): " + url);
+    const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+    const [, mime, b64] = /^data:([^;]+);base64,(.*)$/.exec(dataUrl) || [];
+    return { mime: (mime && mime !== "application/octet-stream") ? mime : (/\.png/i.test(url) ? "image/png" : /\.webp/i.test(url) ? "image/webp" : "image/jpeg"), b64 };
   }
 
   /* ================= interns (one level of delegation) ================= */
@@ -719,7 +847,7 @@ fieldset:disabled .lock{display:block}
 
   let controller = null;
   // the Team editor is locked during a run: NPCs are bound to team slots, so edits mid-run would desync them
-  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("teamFields").disabled = on; $("led").classList.toggle("on", on); }
+  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("playbook").disabled = on; $("teamFields").disabled = on; $("led").classList.toggle("on", on); }
   const isApproval = text => /^\W*APPROVED\b/i.test(text.split("\n")[0]);
 
   $("task").value = store.get("task", "");
@@ -727,28 +855,35 @@ fieldset:disabled .lock{display:block}
 
   $("taskForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const status = $("status"), task = $("task").value.trim();
+    const status = $("status"), input = $("task").value.trim();
+    const job = pendingJob; pendingJob = null;
     status.className = "status";
-    if (!task) { status.className = "status err"; status.textContent = "Type a task first."; return; }
+    if (!input) { status.className = "status err"; status.textContent = "Type the details first."; return; }
     if (controller) return;
-    const missing = [...new Set(team.filter(a => a.provider === "custom" ? !conn.custom.base : !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
-    if (missing.length) { $("connPanel").open = true; status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under Connections, or move those teammates to a provider you've connected."; return; }
+    const pbKey = $("playbook").value, pb = PLAYBOOKS[pbKey];
+    const crew = pb ? buildCrew(pb) : team.slice();
+    const task = pb ? input + "\n\n" + pb.brief + "\n\n" + BRAND_RULES : input;
+    const missing = [...new Set(crew.filter(a => a.provider === "custom" ? !conn.custom.base : !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
+    if (missing.length) { openSettings("connPanel"); status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under ⚙ Connections."; return; }
 
     $("track").textContent = ""; lastSaid.clear(); scene.allHome(); scene.clearMarks();
     controller = new AbortController(); const sig = controller.signal;
     setRunning(true);
-    const rounds = +$("rounds").value;
-    const crew = team.slice();
+    if (pb) scene.sync(crew);
+    const rounds = pb ? pb.rounds : +$("rounds").value;
+    let images = null;
+    const run = { id: Date.now().toString(36), at: Date.now(), title: (job ? job.title : input.split("\n")[0]).slice(0, 90), playbook: pbKey, jobId: job?.id || null,
+      task, status: "running", turns: [], crew: crew.map(({ name, role, provider, model }) => ({ name, role, provider, model })) };
     const judges = crew.filter(a => a.role === "judge");
     // verdicts only count for the current draft: a new builder draft clears them
     const verdicts = new Map();
     const turns = []; let approved = false, r = 1, failures = 0, calls = 0;
-    const ask = (ag, prompt) => { calls++; return callAgent(ag, prompt, sig); };
+    const ask = (ag, prompt) => { calls++; return callAgent(ag, prompt, sig, ag.vision ? images : null); };
     const settle = p => p.then(text => ({ text }), err => ({ err }));
     // One teammate's turn. With delegation on and calls to spare, the first reply may be DELEGATE plus sub-tasks:
     // interns run them in parallel (interns never delegate), then the teammate answers again with their notes.
     async function takeTurn(a, npc, base){
-      const room = a.delegate ? Math.min(3, internCfg.budget - calls - 2) : 0;
+      const room = internCfg.enabled && a.delegate ? Math.min(3, internCfg.budget - calls - 2) : 0;
       const first = settle(ask(a, room > 0 ? base + delegateOffer(room) : base));
       await scene.toBoard(npc);
       npc.bubble = "dots";
@@ -776,8 +911,14 @@ fieldset:disabled .lock{display:block}
       fin.help = help;
       return fin;
     }
-    say("RELAY", null, "New task on the board! Everyone, places.");
+    say("RELAY", null, (job ? "Job from Claude: " + job.title + "!" : pb ? pb.label + " on the board!" : "New task on the board!") + " Everyone, places.");
     try {
+      if (pb?.images) {
+        const urls = [...new Set(input.match(IMG_RE) || [])].slice(0, 4);
+        if (!urls.length) throw new Error("Add at least one image link (PNG, JPG or WebP).");
+        status.textContent = "LOADING " + urls.length + " IMAGE" + (urls.length > 1 ? "S" : "") + "…";
+        images = await Promise.all(urls.map(loadImage));
+      }
       for (; r <= rounds; r++) {
         scene.setRound(r);
         // approved the moment every judge on duty this round has signed off on the latest draft (a judge who errored hasn't)
@@ -799,6 +940,7 @@ fieldset:disabled .lock{display:block}
           } else {
             const text = res.text;
             turns.push({ name: a.name, role: a.role, round: r, text }); lastSaid.set(a, text);
+            run.turns = turns.slice(); saveRun(run);
             const ok = a.role === "judge" ? isApproval(text) : null;
             if (a.role === "builder") verdicts.clear();
             if (a.role === "judge" && turns.some(t => t.role === "builder")) verdicts.set(a, ok);
@@ -817,29 +959,120 @@ fieldset:disabled .lock{display:block}
       const draft = [...turns].reverse().find(t => t.role === "builder") || turns[turns.length - 1];
       if (!draft) throw new Error("No teammate produced a reply. Check the log.");
       const done = Math.min(r, rounds);
-      const fin = logTurn("final", approved ? "★ FINAL · APPROVED" : judges.length ? "FINAL · ROUND LIMIT" : "FINAL", draft.name + (approved ? " · round " + done : ""), draft.text);
-      const btn = el("button", { type: "button", className: "tiny copy", textContent: "COPY FINAL" });
-      btn.onclick = async () => {
-        try { await navigator.clipboard.writeText(draft.text); btn.textContent = "COPIED"; }
-        catch { const rg = document.createRange(); rg.selectNodeContents(fin.pre); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); btn.textContent = "SELECTED · TAP COPY"; }
-      };
-      fin.art.appendChild(btn);
       const verdictLine = approved ? "Approved by " + judges.filter(j => verdicts.get(j)).map(j => j.name).join(", ") + " in round " + done + "."
         : judges.length ? "Not approved: hit the " + rounds + "-round limit." : "No judges on the team.";
       const lastJudge = approved ? null : [...turns].reverse().find(t => t.role === "judge");
-      fin.art.appendChild(handoffControls({ task, draft, crew, verdictLine, lastJudge }));
+      Object.assign(run, { status: approved ? "approved" : "done", calls, verdictLine, approved, round: done,
+        final: { name: draft.name, text: draft.text }, lastJudge: lastJudge ? { name: lastJudge.name, text: lastJudge.text } : null });
+      saveRun(run);
+      // a job's result goes straight back to Claude; anything else waits for the SEND TO CLAUDE button
+      renderFinal(run, job ? () => { job.status = "sent"; saveJobs(); } : null);
+      if (job) { job.status = job.status === "sent" ? "sent" : "done"; saveJobs(); }
       if (approved) { scene.celebrate(); say("RELAY", null, "Every judge signed off. Quest complete! The final version is at the bottom of the log."); }
       else say("RELAY", null, judges.length ? "Out of rounds. The last draft is in the log as the final." : "Done! The final version is at the bottom of the log.");
       status.className = "status ok";
       status.textContent = (approved ? "QUEST COMPLETE" : "DONE") + " · " + calls + " CALLS" + (failures ? " · " + failures + " TURN" + (failures > 1 ? "S" : "") + " SKIPPED" : "");
     } catch (err) {
+      run.status = err.name === "AbortError" ? "stopped" : "failed"; run.turns = turns.slice(); run.calls = calls;
+      if (turns.length) saveRun(run);
       status.className = "status err";
       status.textContent = err.name === "AbortError" ? "STOPPED" : err.message;
       say("RELAY", null, err.name === "AbortError" ? "Meeting cancelled. Everyone back to your desks." : err.message);
       scene.allHome();
-    } finally { setRunning(false); controller = null; }
+    } finally { setRunning(false); controller = null; if (pb) scene.sync(team); }
   });
   $("stop").onclick = () => controller?.abort();
+
+  /* ================= final result + history ================= */
+  function renderFinal(run, onSent){
+    const fin = logTurn("final", run.approved ? "★ FINAL · APPROVED" : run.verdictLine?.startsWith("Not approved") ? "FINAL · ROUND LIMIT" : "FINAL",
+      run.final.name + (run.approved ? " · round " + run.round : ""), run.final.text);
+    const btn = el("button", { type: "button", className: "tiny copy", textContent: "COPY FINAL" });
+    btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(run.final.text); btn.textContent = "COPIED"; }
+      catch { const rg = document.createRange(); rg.selectNodeContents(fin.pre); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); btn.textContent = "SELECTED · TAP COPY"; }
+    };
+    fin.art.appendChild(btn);
+    const job = run.jobId ? jobs.find(j => j.id === run.jobId) : null;
+    fin.art.appendChild(handoffControls({ task: run.task, draft: run.final, crew: run.crew, verdictLine: run.verdictLine, lastJudge: run.lastJudge,
+      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
+    return fin;
+  }
+  // the last 20 runs, each step saved as it happens, so a locked phone or a closed app doesn't lose the work
+  let runs = store.get("runs", []);
+  runs.forEach(x => { if (x.status === "running") x.status = "interrupted"; });
+  function saveRun(run){
+    const i = runs.findIndex(x => x.id === run.id);
+    const copy = Object.assign({}, run, { turns: run.turns.map(t => Object.assign({}, t, { text: clip(t.text) })) });
+    if (i >= 0) runs[i] = copy; else runs.unshift(copy);
+    runs = runs.slice(0, 20);
+    try { localStorage.setItem("relay2.runs", JSON.stringify(runs)); }
+    catch { runs = runs.slice(0, 8); store.set("runs", runs); }
+    renderHistory();
+  }
+  const STATUS_LABEL = { approved: "★ APPROVED", done: "DONE", stopped: "STOPPED", failed: "FAILED", interrupted: "INTERRUPTED", running: "RUNNING" };
+  function renderHistory(){
+    const box = $("history"); box.textContent = "";
+    $("histCount").textContent = runs.length ? runs.length + " SAVED" : "";
+    if (!runs.length) { box.appendChild(el("div", { className: "empty", textContent: "Finished runs are saved here." })); return; }
+    runs.forEach(x => {
+      const b = el("button", { type: "button", className: "hist" },
+        el("div", {}, x.title || "Untitled", el("div", { className: "small", textContent: (PLAYBOOKS[x.playbook]?.label || "Custom team") + " · " + new Date(x.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) })),
+        el("span", { textContent: STATUS_LABEL[x.status] || "" }));
+      b.onclick = () => openRun(x);
+      box.appendChild(b);
+    });
+  }
+  function openRun(x){
+    if (controller) return;
+    $("track").textContent = "";
+    x.turns.forEach(t => logTurn(t.role, t.name + " · R" + t.round, "", t.text));
+    if (x.final) renderFinal(x, null);
+    else logTurn("error", STATUS_LABEL[x.status] || "UNFINISHED", "", "This run didn't finish. Its saved turns are above. Press START to run it again.");
+    if (!x.final && x.task) { $("task").value = x.task.split("\n\n")[0]; store.set("task", $("task").value); }
+    say("RELAY", null, "Opened “" + (x.title || "a run") + "” from history.");
+    $("track").scrollIntoView({ block: "start" });
+  }
+
+  /* ================= jobs from Claude ================= */
+  // Claude posts jobs on the inbox PR: a comment with JOB_MARK and a ```json block {id, title, playbook, task}.
+  let jobs = store.get("jobs", []), pendingJob = null;
+  const JOB_MARK = "<!-- relay-job:v1 -->";
+  const saveJobs = () => { store.set("jobs", jobs); renderJobs(); };
+  function addJob(j){
+    if (!j || !j.id || !j.task || jobs.some(x => x.id === String(j.id))) return null;
+    const job = { id: String(j.id).slice(0, 60), title: String(j.title || j.id).slice(0, 120), playbook: PLAYBOOKS[j.playbook] ? j.playbook : "",
+      task: String(j.task).slice(0, 8000), at: Date.now(), status: "new" };
+    jobs.unshift(job); jobs = jobs.slice(0, 30); saveJobs();
+    return job;
+  }
+  function parseJob(body){ const m = /```json\s*([\s\S]*?)```/.exec(body); try { return m ? JSON.parse(m[1]) : null; } catch { return null; } }
+  function renderJobs(){
+    const box = $("jobs"); box.textContent = "";
+    $("jobsWin").hidden = !jobs.length && !inboxReady();
+    const open = jobs.filter(j => j.status === "new").length;
+    $("jobCount").textContent = open ? open + " NEW" : "";
+    if (!jobs.length) { box.appendChild(el("div", { className: "empty", textContent: "No jobs yet. Claude posts work here for the team to draft." })); return; }
+    jobs.forEach(j => {
+      const runBtn = el("button", { type: "button", className: "tiny", textContent: j.status === "new" ? "RUN" : "RUN AGAIN" });
+      runBtn.onclick = () => {
+        if (controller) return;
+        $("playbook").value = j.playbook; onPlaybook();
+        $("task").value = j.task; store.set("task", j.task);
+        pendingJob = j;
+        $("taskForm").requestSubmit ? $("taskForm").requestSubmit() : $("run").click();
+        $("office").scrollIntoView({ block: "start" });
+      };
+      const del = el("button", { type: "button", className: "tiny", textContent: "✕" });
+      del.setAttribute("aria-label", "Remove job " + j.title);
+      del.onclick = () => { jobs = jobs.filter(x => x !== j); saveJobs(); };
+      box.appendChild(el("div", { className: "job" + (j.status === "new" ? "" : " done") },
+        el("b", { textContent: j.title }),
+        el("div", { className: "small", textContent: (PLAYBOOKS[j.playbook]?.label || "Custom team") + " · " + ({ new: "NEW", done: "DRAFTED", sent: "SENT TO CLAUDE" })[j.status] }),
+        el("div", { className: "small", textContent: j.task.length > 160 ? j.task.slice(0, 160) + "…" : j.task }),
+        el("div", { className: "row" }, runBtn, del)));
+    });
+  }
 
   /* ================= Claude inbox ================= */
   // A run's result goes to a Claude Code session as a comment on a GitHub pull request the session is subscribed to.
@@ -898,7 +1131,7 @@ fieldset:disabled .lock{display:block}
           inbox.since = p.updated_at;
           inbox.seen = (await ghFetch(gh("/issues/" + inbox.pr + "/comments?per_page=100&since=" + encodeURIComponent(inbox.since)))).map(c => c.id);
         }
-        inbox.login = login; inbox.ok = true; saveInbox(); paint(); scene.setClaude(CLAUDE);
+        inbox.login = login; inbox.ok = true; saveInbox(); paint(); scene.setClaude(CLAUDE); renderJobs();
         status.className = "status ok"; status.textContent = "Connected to “" + p.title + "” as " + login + ".";
       } catch (e) {
         inbox.ok = false; saveInbox(); paint(); scene.setClaude(null);
@@ -917,11 +1150,13 @@ fieldset:disabled .lock{display:block}
   // the longest run of backticks in the text, plus one, so the deliverable can't break out of its code fence
   const fenceFor = t => "`".repeat(Math.max(3, ...(String(t).match(/`+/g) || []).map(m => m.length + 1)));
   const quote = t => String(t).split("\n").map(l => "> " + l).join("\n");
-  function handoffBody({ task, draft, crew, verdictLine, lastJudge }, note){
+  function handoffBody({ task, draft, crew, verdictLine, lastJudge, playbook, job }, note){
     const f = fenceFor(draft.text);
     const parts = [
       INBOX_MARK,
       "### Relay Office handoff",
+      job ? "**Job:** `" + job.id + "` " + job.title : "",
+      playbook ? "**Playbook:** " + playbook : "",
       "**Task**\n" + quote(task),
       note ? "**Note for Claude**\n" + quote(note) : "",
       "**Outcome:** " + verdictLine,
@@ -931,18 +1166,18 @@ fieldset:disabled .lock{display:block}
     ];
     return parts.filter(Boolean).join("\n\n").slice(0, 60000);
   }
-  function handoffControls(ctx){
+  function handoffControls(ctx, onSent, auto){
     const note = el("textarea", { placeholder: "Note for Claude (optional), e.g. “Use this as the intro for Post 57”" });
     note.setAttribute("aria-label", "Note for Claude");
     const send = el("button", { type: "button", className: "tiny", textContent: "SEND TO CLAUDE" });
     const st = el("div", { className: "status" });
     send.onclick = async () => {
-      if (!inboxReady()) { $("connPanel").open = true; $("inbox-token")?.scrollIntoView({ block: "center" }); st.className = "status err"; st.textContent = "Set up and TEST the Claude inbox under Connections first."; return; }
+      if (!inboxReady()) { openSettings("connPanel"); $("inbox-token")?.scrollIntoView({ block: "center" }); st.className = "status err"; st.textContent = "Set up and TEST the Claude inbox under Connections first."; return; }
       send.disabled = true; st.className = "status"; st.textContent = "SENDING…";
       try {
         const c = await ghFetch(gh("/issues/" + inbox.pr + "/comments"), { method: "POST", body: JSON.stringify({ body: handoffBody(ctx, note.value.trim()) }) });
         inbox.seen.push(c.id); saveInbox();
-        send.textContent = "SENT"; note.disabled = true;
+        send.textContent = "SENT"; note.disabled = true; onSent?.();
         st.className = "status ok"; st.textContent = "SENT TO CLAUDE · REPLIES SHOW UP HERE";
         say("RELAY", null, "Sent to Claude! When your Claude Code session replies, Claude walks over and the reply lands in the log.");
         setTimeout(pollInbox, 15000);
@@ -950,6 +1185,8 @@ fieldset:disabled .lock{display:block}
         send.disabled = false; st.className = "status err"; st.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message;
       }
     };
+    if (ctx.sentAlready) { send.textContent = "SENT"; send.disabled = true; note.disabled = true; }
+    else if (auto && inboxReady()) setTimeout(() => send.onclick(), 0);
     return el("div", { className: "handoff" }, note, send, st);
   }
 
@@ -966,14 +1203,15 @@ fieldset:disabled .lock{display:block}
         const body = c.body || "";
         // only Claude's replies: posted through the owner's account, ending in the Claude Code footer. The repo is public, so ignore anyone else.
         if (body.includes(INBOX_MARK) || c.user?.login !== inbox.login || !FOOTER.test(body)) continue;
+        if (body.includes(JOB_MARK)) { const job = addJob(parseJob(body)); if (job) claudeSays("New job for the team: " + job.title + ". It's at the top of the screen. Tap RUN when you're ready.", c.created_at, true); continue; }
         claudeSays(body.replace(FOOTER, "").trim(), c.created_at);
       }
       inbox.seen = inbox.seen.slice(-200); saveInbox();
     } catch {} finally { polling = false; }
   }
-  function claudeSays(text, at){
+  function claudeSays(text, at, quiet){
     lastSaid.set(CLAUDE, text);
-    logTurn("claude", "CLAUDE · REPLY", new Date(at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), text);
+    if (!quiet) logTurn("claude", "CLAUDE · REPLY", new Date(at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), text);
     if (controller) return; // don't talk over a running relay; it's in the log
     scene.claudeVisit();
     say("Claude", "claude", text);
@@ -984,12 +1222,13 @@ fieldset:disabled .lock{display:block}
   /* ================= boot ================= */
   scene.sync(team);
   renderConns(); saveConn(); renderTeam(); saveTeam();
-  if (!Object.values(conn).some(c => c.key)) $("connPanel").open = true;
+  if (!Object.values(conn).some(c => c.key)) openSettings("connPanel", true);
   for (const pid in PROVIDERS) if (conn[pid].key && conn[pid].ok) fetchModels(pid).catch(() => {});
   fetchModels("openrouter").catch(() => {});
   document.fonts?.load("8px 'Press Start 2P'").catch(() => {});
   // ask the browser not to evict saved keys under storage pressure (granted at its discretion; harmless if not)
   navigator.storage?.persist?.().catch(() => {});
+  onPlaybook(); renderJobs(); renderHistory(); store.set("runs", runs);
   if (inboxReady()) { scene.setClaude(CLAUDE); pollInbox(); }
 })();
 </script>

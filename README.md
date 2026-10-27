@@ -33,9 +33,28 @@ After pasting a key, tap **TEST**. "WORKING" means the app could list that provi
 
 It opens full screen with its own pixel icon. The site root (`index.html`) redirects to `AgentOffice.html`.
 
+## Playbooks, jobs and history
+
+**Playbooks** (the Task box) are ready-made setups for Strand's repeat work. Each has its own team, task template and a judge that checks a pass/fail list against Strand's rules:
+- **Pin batch:** 5–7 pins with different angles, titles (keyword in the first 40 characters), descriptions, overlay text and alt text.
+- **Post outline:** SEO title and meta description, structure, quick picks, an evidence plan (each claim with a study or "not studied"), FAQs, internal links and where the disclosure goes.
+- **Fact-check:** every claim with a verdict and how to verify it. Claude checks the flagged ones against PubMed before anything is published.
+- **Compliance check:** FTC disclosure, Amazon Associates, Pinterest and Meta ad rules, one line per rule.
+- **Visual brief:** 3 pin concepts with a Canva prompt, in the Strand palette.
+- **Pin critique (image):** paste image links and Gemini reviews the actual pins.
+- **Custom team:** the team you set up under ⚙.
+
+If a playbook's provider has no key, that teammate moves to one you've connected, so one key is enough.
+
+**Jobs from Claude** appear at the top once the Claude inbox is connected. Tap **RUN**; when the team finishes, the result goes back to Claude automatically.
+
+**History** keeps your last 20 runs, saved step by step, so locking the phone or closing the app doesn't lose work. If the phone locks during a model call, the app retries that call once when you come back.
+
+**⚙ (top right)** holds your keys (Connections) and the custom team (Team).
+
 ## Interns (teammates delegating work)
 
-A teammate with **Can hand work to interns** checked may split its turn into up to 3 sub-tasks. Small intern sprites run to the side table next to the whiteboard and work at the same time. The teammate then writes its turn using their notes, which appear in the log under "INTERNS HELPED". Interns can't hire interns of their own.
+Interns are **off by default** (Team → Interns → Use interns), because three at once can hit Groq's free per-minute limit. When on, a teammate with **Can hand work to interns** checked may split its turn into up to 3 sub-tasks. Small intern sprites run to the side table next to the whiteboard and work at the same time. The teammate then writes its turn using their notes, which appear in the log under "INTERNS HELPED". Interns can't hire interns of their own.
 
 - **Interns use** (under Team → Interns) sets the interns' provider and model. The default is Groq GPT-OSS 120B, which is fast and has generous free limits. If that provider has no key, interns use the teammate's own model.
 - **Max calls per run** (default 30) caps how much delegation a run can do. Past it, teammates answer on their own.
