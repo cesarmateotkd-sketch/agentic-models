@@ -938,7 +938,7 @@ fieldset:disabled .lock{display:block}
     if (!c.key && a.provider !== "custom") throw new Error("No " + P.name + " key. Add it under Connections.");
     if (!c.base && !P.base) throw new Error("No base URL for " + P.name + ". Add it under Connections.");
     const base = (c.base || P.base).replace(/\/+$/, "");
-    const system = "You are " + a.name + ", the " + (a.title || a.role) + " (" + a.role + ") on a team of AI agents from different companies working on one task. " + a.prompt + missionFor(a);
+    const system = "You are " + a.name + ", the " + (a.title || a.role) + " (" + a.role + ") on a team of AI agents from different companies working on one task. If the task mentions something you haven't been given (a post number, a page, a file, a past conversation), say so plainly and work only from what's in front of you; never guess what it means. " + a.prompt + missionFor(a);
     let r, j = null;
     if (P.kind === "gemini") {
       r = await fetch(base + "/models/" + encodeURIComponent(a.model) + ":generateContent?key=" + encodeURIComponent(c.key), {
