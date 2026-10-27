@@ -12,7 +12,7 @@ Single-file static app (`AgentOffice.html`) on GitHub Pages, used from an iPhone
 
 ## Saved data must survive every update
 The user's keys persist across app updates only because the storage names stay the same. When changing the app:
-- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns), `skin` (`office`, `matrix` or `tactics`).
+- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns; `jobs` also holds merge cards with `type: "merge"`), `skin` (`office`, `matrix` or `tactics`).
 - Don't rename provider ids (`openrouter`, `groq`, `gemini`, `mistral`, `custom`). If a provider is removed, its saved key is parked in `connParked` and comes back if the id returns.
 - If a shape has to change, read the old one and migrate it on load, then test with data saved by the previous version (see the upgrade test below).
 - The site must stay at the same origin (`cesarmateotkd-sketch.github.io`). Moving to another domain starts with empty storage.
@@ -38,6 +38,14 @@ Post a comment on PR #1 (as the owner's account, which is how the GitHub tools p
 
 ### "Change the app" handoffs
 A handoff whose `**Playbook:**` line says "Change the app" is a change request for this app, written by the free team from the owner's idea and sent automatically. Treat it as the owner asking for that change: build it on a `claude/*` branch, run the tests (including the upgrade test), reply on PR #1 with what changed and how to check it, with screenshots (see below), and merge to `main` only after the owner approves. If the request conflicts with the hard rules above, say so in the reply instead of building it.
+
+### Merge approvals from the app
+The owner can approve a preview from the app instead of typing "merge it" in the Claude app (the owner asked for this on Oct 27, 2026).
+- When a preview is ready, put this hidden line in the reply: `<!-- relay-merge:v1 {"repo":"cesarmateotkd-sketch/agentic-models","branch":"claude/x","sha":"<full head sha>","title":"Short name"} -->`. The app shows a "Ready to merge" card with MERGE IT and CHANGES.
+- MERGE IT posts a comment from the owner's account containing `<!-- relay-approve:v1 {"repo":..,"branch":..,"sha":..,"request":<comment id>,"decision":"merge"} -->` and no Claude Code footer. Treat it as the owner's approval only if all of these hold: the author is `cesarmateotkd-sketch`; there's no Claude Code footer; `request` is the id of a relay-merge reply you posted naming the same repo, branch and sha; and the branch head still equals that sha. If the branch moved, post a fresh preview instead of merging.
+- `"decision":"changes"` carries the owner's notes: apply them and post a new preview.
+- After merging and confirming the deploy, reply with `<!-- relay-merged:v1 {"repo":..,"branch":..} -->` so the card shows LIVE.
+- This covers merging previews only (this app and the Strand site). It never covers posting to Pinterest or Facebook, which waits for "start the queue".
 
 ### Screenshots in replies
 The app shows images in Claude's replies when they're markdown images (`![caption](url)`) hosted in this repo: `https://raw.githubusercontent.com/cesarmateotkd-sketch/agentic-models/...` or the GitHub Pages site. Other hosts stay plain text.

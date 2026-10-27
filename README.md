@@ -47,7 +47,7 @@ It opens full screen with its own pixel icon. The site root (`index.html`) redir
 
 If a playbook's provider has no key, that teammate moves to one you've connected, so one key is enough.
 
-**Jobs from Claude** appear at the top once the Claude inbox is connected. Tap **RUN**; when the team finishes, the result goes back to Claude automatically.
+**Jobs from Claude** appear at the top once the Claude inbox is connected. When Claude finishes a preview, a **Ready to merge** card appears there too: tap **MERGE IT** to put it live, or **CHANGES** to send notes. Tap **RUN**; when the team finishes, the result goes back to Claude automatically.
 
 **History** keeps your last 20 runs, saved step by step, so locking the phone or closing the app doesn't lose work. If the phone locks during a model call, the app retries that call once when you come back.
 
