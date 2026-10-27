@@ -54,6 +54,12 @@ The app can hand a finished run to a Claude Code session. Each handoff goes in a
 - Risky steps (pushing to `main`, deleting things, posting publicly) still get a yes from you in the Claude app.
 - The token can only read and comment on pull requests in this one repo.
 
+## Where your keys are saved
+
+Keys and the GitHub token are saved in the browser on your phone, and they survive app updates. Two iPhone details:
+- **The home-screen app and Safari keep separate storage.** Keys typed into the site in Safari don't appear in the home-screen app, so enter them in the app itself.
+- **Deleting the home-screen icon, or clearing Safari's website data, erases them.** Keep your keys in a password manager so you can paste them back.
+
 ## Updating the app
 
 - **Edit:** change `AgentOffice.html` (everything is in that one file) and push to `main`. GitHub Pages redeploys in about a minute.

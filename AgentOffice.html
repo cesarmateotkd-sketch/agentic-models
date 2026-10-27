@@ -191,6 +191,8 @@ fieldset:disabled .lock{display:block}
 (() => {
   const $ = id => document.getElementById(id);
   const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+  // Storage contract: everything the user typed lives in localStorage under "relay2.*" (conn, inbox, team4, task).
+  // App updates must keep these names and shapes, or migrate them on load. Never drop a saved key.
   const store = {
     get(k, d){ try { const v = localStorage.getItem("relay2." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v){ try { localStorage.setItem("relay2." + k, JSON.stringify(v)); } catch {} }
@@ -211,7 +213,11 @@ fieldset:disabled .lock{display:block}
       note: "Any service with an OpenAI-style /chat/completions endpoint. Enter its base URL.", def: "" }
   };
   const conn = store.get("conn", {});
-  for (const p in conn) if (!PROVIDERS[p]) delete conn[p];
+  // a provider this version doesn't know (renamed or removed) is parked, not deleted, so its key isn't lost
+  const parked = store.get("connParked", {});
+  for (const p in conn) if (!PROVIDERS[p]) { if (conn[p]?.key) parked[p] = conn[p]; delete conn[p]; }
+  for (const p in PROVIDERS) if (!conn[p] && parked[p]) { conn[p] = parked[p]; delete parked[p]; }
+  store.set("connParked", parked);
   for (const p in PROVIDERS) conn[p] = Object.assign({ key: "", base: PROVIDERS[p].base, ok: null }, conn[p]);
   const modelLists = {};
   const saveConn = () => { store.set("conn", conn); const n = Object.values(conn).filter(c => c.key).length; $("connCount").textContent = n ? n + " ON" : "ADD KEY"; };
@@ -871,6 +877,8 @@ fieldset:disabled .lock{display:block}
   for (const pid in PROVIDERS) if (conn[pid].key && conn[pid].ok) fetchModels(pid).catch(() => {});
   fetchModels("openrouter").catch(() => {});
   document.fonts?.load("8px 'Press Start 2P'").catch(() => {});
+  // ask the browser not to evict saved keys under storage pressure (granted at its discretion; harmless if not)
+  navigator.storage?.persist?.().catch(() => {});
   if (inboxReady()) { scene.setClaude(CLAUDE); pollInbox(); }
 })();
 </script>
