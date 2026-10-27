@@ -9,6 +9,7 @@ Single-file static app (`AgentOffice.html`) on GitHub Pages, used from an iPhone
 - Keep the GBA look: canvas pixel art, `image-rendering: pixelated`, Press Start 2P and Pixelify Sans.
 - Skins (⚙ → Skin) change only colors and sprites, never the layout or walking paths. Every new drawing branch must keep the same positions: desks, aisles, the x=120 column, the intern table and Claude's spot.
 - Preview changes with mobile screenshots on a `claude/*` branch; merge to `main` only after the owner approves.
+- Bump `APP_VERSION` (format `YYYY-MM-DD.n`, compared as a string) in every release that changes `AgentOffice.html`. The app checks the live file on open and shows an UPDATE READY banner when the phone holds an older copy.
 
 ## Saved data must survive every update
 The user's keys persist across app updates only because the storage names stay the same. When changing the app:

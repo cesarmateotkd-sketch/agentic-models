@@ -300,6 +300,8 @@ fieldset:disabled .lock{display:block}
     set(k, v){ try { localStorage.setItem("relay2." + k, JSON.stringify(v)); } catch {} }
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // bump on every release; the app compares it with the live file to spot a stale copy on the phone
+  const APP_VERSION = "2026-10-28.1";
   const SKINS = ["office", "matrix", "tactics"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics";
@@ -1568,8 +1570,26 @@ Every recommendation must say why: the target search phrase and intent, the data
   }
 
   /* ----- notice: one banner at a time for what's waiting on the owner ----- */
+  /* ----- update check: an iPhone home-screen app can keep an old copy of the page; offer a one-tap reload ----- */
+  let updateTo = "", lastCheck = 0;
+  async function checkUpdate(){
+    if (Date.now() - lastCheck < 120000 || controller) return;
+    lastCheck = Date.now();
+    try {
+      const r = await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" });
+      const v = r.ok ? /const APP_VERSION = "([^"]+)"/.exec(await r.text())?.[1] : "";
+      if (v && v > APP_VERSION && v !== updateTo) { updateTo = v; renderNotice(); }
+    } catch {}
+  }
   function renderNotice(){
     const box = $("notice"); box.textContent = "";
+    if (updateTo) {
+      box.hidden = false;
+      const go = el("button", { type: "button", className: "tiny", textContent: "UPDATE NOW" });
+      go.onclick = () => location.replace(location.pathname + "?v=" + encodeURIComponent(updateTo));
+      box.append(el("b", { textContent: "★ UPDATE READY" }), el("div", { className: "small", textContent: "A newer version of the app is live. Your keys and history stay." }), el("div", { className: "row" }, go));
+      return;
+    }
     const j = jobs.find(x => !x.noticed && ((x.type === "pick" && x.status === "new") || (x.type === "merge" && x.status === "live" && x.url)));
     box.hidden = !j;
     try { const n = jobs.filter(x => x.status === "new").length; if (n) navigator.setAppBadge?.(n)?.catch?.(() => {}); else navigator.clearAppBadge?.()?.catch?.(() => {}); } catch {}
@@ -1824,7 +1844,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     say("Claude", "claude", clean + (shots.length ? "\n\n[" + shots.length + " screenshot" + (shots.length > 1 ? "s" : "") + " in the log below. Tap one to open it full size.]" : ""));
   }
   setInterval(pollInbox, 20000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollInbox(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollInbox(); checkUpdate(); } });
 
   /* ================= skins ================= */
   function showClaude(){ scene.setClaude(inboxReady() || isMatrix() ? CLAUDE : null); }
@@ -1855,6 +1875,8 @@ Every recommendation must say why: the target search phrase and intent, the data
   onPlaybook(); renderJobs(); renderHistory(); store.set("runs", runs);
   applySkin();
   if (inboxReady()) pollInbox();
+  checkUpdate();
+  $("settings").appendChild(el("div", { className: "small", textContent: "App version " + APP_VERSION }));
 })();
 </script>
 </body>
