@@ -326,7 +326,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.6";
+  const APP_VERSION = "2026-10-28.7";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -351,6 +351,8 @@ fieldset:disabled .lock{display:block}
       note: "Gemini 3.8 Flash and 2.5 Pro on the AI Studio free tier.", def: "gemini-3.8-flash" },
     mistral: { name: "Mistral", base: "https://api.mistral.ai/v1", kind: "openai", keyUrl: "https://console.mistral.ai/api-keys",
       note: "Pick the free Experiment plan when you sign up. Free-plan prompts may be used for training.", def: "mistral-medium-latest" },
+    muse: { name: "Meta Muse", base: "https://api.meta.ai/v1", kind: "openai", keyUrl: "https://developer.meta.com/",
+      note: "Paid but cheap, with $20 of free credit to start (US accounts). Muse Spark 1.3 sees images and rarely hits limits, so the app keeps it as the backstop: it steps in for image reviews and for any teammate only after the free models fail.", def: "muse-spark-1.3" },
     custom: { name: "Custom", base: "", kind: "openai", keyUrl: "",
       note: "Any service with an OpenAI-style /chat/completions endpoint. Enter its base URL.", def: "" }
   };
@@ -423,7 +425,7 @@ fieldset:disabled .lock{display:block}
         kids.push(base);
       }
       kids.push(el("div", { className: "keyrow" }, key, show, test));
-      if (P.keyUrl) kids.push(el("a", { href: P.keyUrl, target: "_blank", rel: "noopener", className: "small", textContent: "Get a free key ↗" }));
+      if (P.keyUrl) kids.push(el("a", { href: P.keyUrl, target: "_blank", rel: "noopener", className: "small", textContent: pid === "muse" ? "Get a key ($20 free credit) ↗" : "Get a free key ↗" }));
       kids.push(status);
       box.appendChild(el("div", { className: "conn" }, ...kids));
     }
@@ -1289,6 +1291,7 @@ fieldset:disabled .lock{display:block}
     let until = 0, why = "";
     if (/per[- ]?day|daily|quota|free-models-per-day|exceeded your current/i.test(m)) { const d = new Date(); d.setUTCHours(24, 0, 30, 0); until = d.getTime(); why = "daily limit"; }
     else if (err.status === 429 || err.status === 503 || err.status === 529 || /rate limit|high demand|overloaded/i.test(m)) { until = now + Math.max(120, (err.retryAfter || 0) + 5) * 1000; why = /high demand|overloaded/i.test(m) ? "busy" : "rate limit"; }
+    else if (err.status === 402) { const d = new Date(); d.setUTCHours(24, 0, 30, 0); until = d.getTime(); why = "out of credit"; }
     else if (err.status === 401 || err.status === 403) { until = now + 30 * 60000; why = "key refused"; }
     else if (err.status === 400 || err.status === 404) { until = now + 30 * 60000; why = "model unavailable"; }
     else if (err.timedOut) { until = now + 5 * 60000; why = "too slow"; }
@@ -1300,9 +1303,13 @@ fieldset:disabled .lock{display:block}
   function backupsFor(a){
     if (a.vision) return VISION_BACKUPS.slice();
     const same = a.provider === "openrouter" && modelLists.openrouter ? modelLists.openrouter.filter(m => /:free$/.test(m) && m !== a.model).slice(0, 2).map(m => ({ provider: "openrouter", model: m })) : [];
-    return same.concat(["groq", "gemini", "mistral", "openrouter"].map(p => ({ provider: p, model: PROVIDERS[p].def })));
+    return same.concat(["groq", "gemini", "mistral", "openrouter", "muse"].map(p => ({ provider: p, model: PROVIDERS[p].def })));
   }
-  const pickBackup = (a, tried) => backupsFor(a).find(o => o.model && !tried.includes(o.provider + "/" + o.model) && hasKey(o.provider) && !resting(o));
+  // Muse is paid, so it is only the last resort: after two free backups have failed, the third try goes straight to it
+  const MUSE = { provider: "muse", model: "muse-spark-1.3" };
+  const museFree = tried => hasKey("muse") && !resting(MUSE) && !tried.includes(hkey(MUSE));
+  const pickBackup = (a, tried, k = 0) => (k >= 2 && museFree(tried) ? MUSE : null)
+    || backupsFor(a).find(o => o.model && !tried.includes(o.provider + "/" + o.model) && hasKey(o.provider) && !resting(o));
 
   /* ================= calling models ================= */
   const CALL_TIMEOUT = 180000;
@@ -1394,7 +1401,7 @@ fieldset:disabled .lock{display:block}
   function httpErr(a, status, msg){
     const hint = status === 401 || status === 403 ? " Check that key under Connections."
       : status === 429 ? " Rate limit hit. Wait a bit or move this teammate to another provider."
-      : status === 402 ? " This model needs credit. Pick a free one."
+      : status === 402 ? (a.provider === "muse" ? " Your Meta credit has run out. Top it up at developer.meta.com or remove the Muse key." : " This model needs credit. Pick a free one.")
       : status === 400 || status === 404 ? " The model name may be wrong. Tap the Model field to pick from the list." : "";
     const e = new Error(a.name + " (" + PROVIDERS[a.provider].name + " · " + a.model + "): " + (msg || "HTTP " + status) + hint);
     e.status = status;
@@ -1482,13 +1489,13 @@ fieldset:disabled .lock{display:block}
   }
   $("playbook").addEventListener("change", onPlaybook);
   // models that accept images, in the order a failed image reviewer tries them
-  const VISION_BACKUPS = [{ provider: "gemini", model: "gemini-2.5-pro" }, { provider: "mistral", model: "mistral-medium-latest" }];
+  const VISION_BACKUPS = [{ provider: "gemini", model: "gemini-2.5-pro" }, { provider: "mistral", model: "mistral-medium-latest" }, { provider: "muse", model: "muse-spark-1.3" }];
   const hasKey = p => p === "custom" ? !!conn.custom.base : !!conn[p]?.key;
   // a playbook teammate whose provider has no key moves to a connected one, so a single key is enough to run any playbook
   const buildCrew = pb => pb.crew.map(spec => {
     if (hasKey(spec.provider)) return Object.assign({}, spec);
     if (spec.vision) return Object.assign({}, spec, VISION_BACKUPS.find(o => hasKey(o.provider)) || {});
-    const p = ["gemini", "groq", "mistral", "openrouter"].find(hasKey);
+    const p = ["gemini", "groq", "mistral", "openrouter", "muse"].find(hasKey);
     return Object.assign({}, spec, p ? { provider: p, model: PROVIDERS[p].def } : {});
   });
   const IMG_RE = /https?:\/\/[^\s"'<>)]+?\.(?:png|jpe?g|webp)(?:\?[^\s"'<>)]*)?/gi;
@@ -1775,12 +1782,12 @@ Every recommendation must say why: the target search phrase and intent, the data
           }
           let res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
           // any teammate whose model fails tries backups: up to 2 for text, every image-capable model for an image reviewer
-          for (let k = 0; k < (a.vision ? VISION_BACKUPS.length : 2) && res.err && res.err.name !== "AbortError"; k++) {
+          for (let k = 0; k < (a.vision ? VISION_BACKUPS.length : 2 + (hasKey("muse") ? 1 : 0)) && res.err && res.err.name !== "AbortError"; k++) {
             markSick(a, res.err);
-            const alt = pickBackup(a, tried);
+            const alt = pickBackup(a, tried, k);
             const why = isNetErr(res.err) ? "couldn't reach " + PROVIDERS[a.provider].name : res.err.message;
             if (!alt) {
-              if (a.vision) res.err = new Error(why + " Image review needs a model that can see images (Gemini, or Mistral with a key). Try again in a minute.");
+              if (a.vision) res.err = new Error(why + " Image review needs a model that can see images (Gemini, Mistral or Meta Muse with a key). Try again in a minute.");
               break;
             }
             tried.push(alt.provider + "/" + alt.model);
@@ -1832,7 +1839,7 @@ Every recommendation must say why: the target search phrase and intent, the data
       let why = null;
       if (turns.length > 1 || ARTICLE_PLAYBOOKS.includes(pbKey)) {
         status.textContent = "WRITING THE DECISION SUMMARY…";
-        const scribes = ["groq", "gemini", "mistral", "openrouter", "custom"].filter(hasKey)
+        const scribes = ["groq", "gemini", "mistral", "openrouter", "muse", "custom"].filter(hasKey)
           .map(p => ({ name: "Scribe", title: "Decision summary", role: "helper", provider: p, model: PROVIDERS[p].def || crew[0].model, prompt: SUMMARY_PROMPT }))
           .filter(sc => sc.model && !resting(sc)).slice(0, 2);
         for (const scribe of scribes) {

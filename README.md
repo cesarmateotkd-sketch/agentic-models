@@ -22,6 +22,7 @@ You paste API keys under **Connections**. They're saved only in your browser's `
 | **Groq** | [console.groq.com/keys](https://console.groq.com/keys) | Sign in, then **Create API Key**. Fast, with generous free daily limits. |
 | **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Sign in with a Google account, then **Create API key**. Uses the AI Studio free tier. |
 | **Mistral** | [console.mistral.ai/api-keys](https://console.mistral.ai/api-keys) | Choose the free **Experiment** plan (phone verification), then create a key. Prompts on the free plan may be used for training. |
+| **Meta Muse** (optional, paid) | [developer.meta.com](https://developer.meta.com/) | Create a Model API key (US accounts; $20 free credit to start). The app only calls Muse Spark 1.3 when the free models fail, as the backstop for writing and image reviews. |
 | **Custom** | — | Any OpenAI-compatible API. Enter its base URL (ending in `/v1` or similar) and a key if it needs one. |
 
 After pasting a key, tap **TEST**. "WORKING" means the app could list that provider's models. Tap a teammate's Model field to pick from that list.
@@ -73,7 +74,7 @@ Characters are 16×20 shaded pixel sprites with front, back and side views. They
 
 When a provider says it's busy ("try again in 24s", "high demand"), the app waits and retries up to twice, with a countdown in the status line. Limits that don't say how long to wait, or need more than a minute (like a used-up daily quota), aren't retried; the writer moves to another provider instead.
 
-If a playbook's writer fails (wrong model name, rate limit), it tries once more on another connected provider. Pin critique only moves to models that can see images: Gemini 2.5 Pro, then Mistral if you've added a Mistral key. Judges wait until there's a draft, and a run with no draft sends nothing to Claude.
+If a playbook's writer fails (wrong model name, rate limit), it tries once more on another connected provider. Pin critique only moves to models that can see images: Gemini 2.5 Pro, then Mistral, then Meta Muse, if you've added those keys. With a Muse key, any teammate whose two free backups fail gets a third try on Muse. Judges wait until there's a draft, and a run with no draft sends nothing to Claude.
 
 ## Interns (teammates delegating work)
 

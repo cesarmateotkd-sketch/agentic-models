@@ -14,7 +14,7 @@ Single-file static app (`AgentOffice.html`) on GitHub Pages, used from an iPhone
 ## Saved data must survive every update
 The user's keys persist across app updates only because the storage names stay the same. When changing the app:
 - Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns; `jobs` also holds merge cards with `type: "merge"`), `skin` (`office`, `matrix`, `tactics` or `ps2`), `mission` (`{on, text}`: the shared mission brief), `context` (`general` or `strand`, the task box switch), `health` (models resting after a rate limit or quota, by `provider/model`, with `until` and `why`), `briefing` (the last Strand briefing fetched, for offline use).
-- Don't rename provider ids (`openrouter`, `groq`, `gemini`, `mistral`, `custom`). If a provider is removed, its saved key is parked in `connParked` and comes back if the id returns.
+- Don't rename provider ids (`openrouter`, `groq`, `gemini`, `mistral`, `muse`, `custom`). If a provider is removed, its saved key is parked in `connParked` and comes back if the id returns.
 - If a shape has to change, read the old one and migrate it on load, then test with data saved by the previous version (see the upgrade test below).
 - The site must stay at the same origin (`cesarmateotkd-sketch.github.io`). Moving to another domain starts with empty storage.
 
@@ -77,6 +77,7 @@ The owner wants to know why a decision was made, above all for articles posted o
 ### Reliability (owner request, Oct 28, 2026)
 - A model that fails with a rate limit, quota, refused key or missing model "rests": daily quotas until midnight UTC, others for a few minutes. Resting models are skipped up front; ⚙ → Connections lists them with a RESET button.
 - Every teammate (any role, playbooks and the custom team) falls back to up to 2 backups: other free OpenRouter models when the list is loaded, then each connected provider's default. Image reviewers only use models that can see images.
+- **Meta Muse (owner request, Oct 28, 2026)** is the paid backstop (Muse Spark 1.3 on `api.meta.ai/v1`, OpenAI-style, browser calls allowed). It never runs while free models work: with a Muse key, a teammate gets a third try on Muse after two free backups fail, and image reviews try it after Gemini and Mistral. Out of credit (402) rests it until midnight UTC. Don't make it a default teammate model; it spends the owner's credit.
 - When no model can write a draft, the app hands the task to Claude: automatically for a job from Claude, otherwise with ASK CLAUDE INSTEAD. That handoff's outcome says "The team couldn't produce a draft". Do the task directly and reply with the result.
 
 ### Merge approvals from the app
