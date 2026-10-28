@@ -162,6 +162,17 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 :root[data-skin="tactics"] .brand{color:#c9a46a}
 :root[data-skin="tactics"] :is(input,textarea,select,button:not(.round-btn):not(.gear),.agent,.turn,.job,.hist){background:#f8f0dc}
 :root[data-skin="tactics"] canvas#office{background:#2a2230}
+/* PS2 skin: deep navy menus with cool blue edges, like a PS2 system screen; the office renders at 480x320 */
+:root[data-skin="ps2"]{
+  --shell:#0a0e24; --shell-dark:#05060f; --bezel:#05060f;
+  --win:#141a3a; --win-edge:#6f86c8; --win-inner:#28305a; --ink:#e8eeff; --muted:#9aa6d0;
+  --gold:#9fd0ff; --claude:#ffb08a; color-scheme:dark;
+}
+:root[data-skin="ps2"] body{background-image:radial-gradient(ellipse at top,rgba(110,140,255,.18),transparent 60%),linear-gradient(#0a0e24,#04050d)}
+:root[data-skin="ps2"] .brand{color:#9fd0ff}
+:root[data-skin="ps2"] :is(input,textarea,select,button:not(.round-btn):not(.gear),.agent,.turn,.job,.hist){background:#0d1230;color:var(--ink)}
+:root[data-skin="ps2"] ::placeholder{color:#6a76a8}
+:root[data-skin="ps2"] canvas#office{background:#0a0e24}
 :root[data-skin="tactics"] .round-btn{font-size:20px;background:#b8283a;border-color:#5a0f18;box-shadow:0 4px 0 #5a0f18}
 :root[data-skin="tactics"] .round-btn.b{background:#2c4f9e;border-color:#12244f;box-shadow:0 4px 0 #12244f}
 .gear{margin-left:auto;background:none;border:0;box-shadow:none;color:#b8b4e8;font:16px var(--px);padding:6px 8px;min-width:44px;min-height:36px}
@@ -243,7 +254,7 @@ fieldset:disabled .lock{display:block}
   <section class="win">
     <h2>Skin</h2>
     <div class="stack"><label>Look of the app
-      <select id="skin"><option value="office">Office (classic)</option><option value="matrix">Matrix</option><option value="tactics">Tactics (PSX)</option></select>
+      <select id="skin"><option value="office">Office (classic)</option><option value="matrix">Matrix</option><option value="tactics">Tactics (PSX)</option><option value="ps2">PS2 (hi-res)</option></select>
     </label></div>
   </section>
   <details class="win" id="missionPanel">
@@ -301,10 +312,10 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.4";
-  const SKINS = ["office", "matrix", "tactics"];
+  const APP_VERSION = "2026-10-28.5";
+  const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
-  const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics";
+  const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
   // keys and team sit behind the gear so the main screen is just the office, jobs, task, log and history
   function openSettings(panel, quiet){
     $("settings").hidden = false; $("gear").setAttribute("aria-expanded", "true");
@@ -804,6 +815,7 @@ fieldset:disabled .lock{display:block}
       : { frame: "#2a2f48", hi: "#c8d6ea", tint: "rgba(170,215,255,.30)", glint: "#ffffff" };
     // back wall of a cubicle, with the gap its owner walks through from the aisle
     function cubicleBack(s){
+      if (isPS2()) return cubicleBackPS(s);
       const P = panelPal(), y0 = s.dtop - 24;
       [[s.dx - 19, 7], [s.dx + 6, 13]].forEach(([x, w]) => {
         R(x, y0, w, 1, P.cap); R(x, y0 + 1, w, 1, P.capShade); R(x, y0 + 2, w, 6, P.face); R(x, y0 + 7, w, 1, P.shade); R(x, y0 + 8, w, 1, P.line);
@@ -814,6 +826,7 @@ fieldset:disabled .lock{display:block}
     }
     // side walls: a thin rail running back to the aisle, and an end face toward us
     function cubicleSides(s){
+      if (isPS2()) return cubicleSidesPS(s);
       const P = panelPal(), y0 = s.dtop - 24, yEnd = s.dtop + 4;
       [[s.dx - 19, 1], [s.dx + 16, -1]].forEach(([x, inward]) => {
         R(x, y0, 3, yEnd - y0, P.face); R(x + (inward > 0 ? 2 : 0), y0, 1, yEnd - y0, P.shade); R(x + (inward > 0 ? 0 : 2), y0, 1, yEnd - y0, P.cap);
@@ -824,6 +837,7 @@ fieldset:disabled .lock{display:block}
     }
     // the boardroom's glass front, drawn in depth order so people inside stand behind it
     function glassFront(){
+      if (isPS2()) return glassFrontPS();
       const G = glassPal();
       [[BR.x0, BR.door0 - BR.x0], [BR.door1, BR.x1 - BR.door1]].forEach(([x, w]) => {
         ctx.fillStyle = G.tint; ctx.fillRect(x, 54, w, 5);
@@ -885,7 +899,229 @@ fieldset:disabled .lock{display:block}
       // water cooler, outside the boardroom
       R(62, 14, 10, 20, "#2a2f48"); R(63, 15, 8, 8, "#88c8f0"); R(63, 23, 8, 10, "#e8e8f0"); R(64, 16, 2, 4, "#c8ecff"); R(63, 32, 8, 1, "#a4aec4");
     }
+
+    /* ================= PS2 skin =================
+       Same 240x160 map (positions, paths and taps unchanged), rendered on a 480x320 canvas so every
+       logical pixel can hold four real ones: smooth gradients, gloss, glow, soft shadows and see-through glass.
+       Characters are the regular sprites smoothed with Scale2x and lit warm from the upper left, cool lower right. */
+    function applyRes(){
+      const hi = isPS2(), w = hi ? 480 : 240, h = hi ? 320 : 160;
+      if (cv.width !== w) { cv.width = w; cv.height = h; }
+      ctx.setTransform(hi ? 2 : 1, 0, 0, hi ? 2 : 1, 0, 0); ctx.imageSmoothingEnabled = false;
+    }
+    const hiCache = new WeakMap();
+    function hiSprite(src){
+      let out = hiCache.get(src); if (out) return out;
+      const w = src.width, h = src.height, d = src.getContext("2d").getImageData(0, 0, w, h).data;
+      // soften the face shade before scaling (Scale2x would join chin, mouth and cheek shading into a "beard")
+      const SKIN = 0xf8c8a0, SKIN_D = 0xe0a078, EYE = 0x283040;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 127 && ((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]) === SKIN_D) { d[i] = 0xf0; d[i + 1] = 0xbc; d[i + 2] = 0x94; }
+      const px = (x, y) => { if (x < 0 || y < 0 || x >= w || y >= h) return 0; const i = (y * w + x) * 4; return d[i + 3] < 128 ? 0 : ((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]) + 1; };
+      const isEye = (x, y) => px(x, y) === EYE + 1 && [px(x - 1, y), px(x + 1, y)].some(v => v === SKIN + 1);
+      out = document.createElement("canvas"); out.width = w * 2; out.height = h * 2;
+      const o = out.getContext("2d"), img = o.createImageData(w * 2, h * 2), q = img.data;
+      const put = (x, y, v) => { if (!v) return; v -= 1; const i = (y * w * 2 + x) * 4; q[i] = v >> 16 & 255; q[i + 1] = v >> 8 & 255; q[i + 2] = v & 255; q[i + 3] = 255; };
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const P = px(x, y), A = px(x, y - 1), B = px(x + 1, y), C = px(x - 1, y), D = px(x, y + 1);
+        put(2 * x, 2 * y, C === A && C !== D && A !== B ? A : P); put(2 * x + 1, 2 * y, A === B && A !== C && B !== D ? B : P);
+        put(2 * x, 2 * y + 1, D === C && D !== B && C !== A ? C : P); put(2 * x + 1, 2 * y + 1, B === D && B !== A && D !== C ? D : P);
+      }
+      // a catchlight in each eye
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (isEye(x, y) && px(x, y - 1) !== EYE + 1) put(2 * x, 2 * y, 0xf4f8ff + 1);
+      o.putImageData(img, 0, 0);
+      o.globalCompositeOperation = "source-atop";
+      const g = o.createLinearGradient(0, 0, w * 2, h * 2);
+      g.addColorStop(0, "rgba(255,236,200,.24)"); g.addColorStop(.5, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(40,30,110,.30)");
+      o.fillStyle = g; o.fillRect(0, 0, w * 2, h * 2);
+      hiCache.set(src, out); return out;
+    }
+    // drawing helpers that work on any context (the cached background or the live canvas)
+    let X = ctx;
+    const lg = (x0, y0, x1, y1, stops) => { const g = X.createLinearGradient(x0, y0, x1, y1); stops.forEach(([o, c]) => g.addColorStop(o, c)); return g; };
+    const Q = (x, y, w, h, f) => { X.fillStyle = f; X.fillRect(x, y, w, h); };
+    function glow(x, y, r, color, alpha){
+      const g = X.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, color); g.addColorStop(1, "rgba(0,0,0,0)");
+      X.save(); X.globalCompositeOperation = "lighter"; X.globalAlpha = alpha; X.fillStyle = g; X.fillRect(x - r, y - r, r * 2, r * 2); X.restore();
+    }
+    function softShadow(x, y, rx, ry, a){
+      X.save(); X.translate(x, y); X.scale(1, ry / rx);
+      const g = X.createRadialGradient(0, 0, 0, 0, 0, rx); g.addColorStop(0, "rgba(16,10,36," + a + ")"); g.addColorStop(1, "rgba(16,10,36,0)");
+      X.fillStyle = g; X.fillRect(-rx, -rx, rx * 2, rx * 2); X.restore();
+    }
+    const WINDOWS = [[10, 46], [184, 46]];
+    let psBg = null, psVignette = null;
+    function bakePS2(){
+      psBg = document.createElement("canvas"); psBg.width = 480; psBg.height = 320;
+      const b = psBg.getContext("2d"); b.setTransform(2, 0, 0, 2, 0, 0); X = b;
+      // wall: lit plaster with panel seams, a dark wood wainscot and a crown shadow
+      Q(0, 0, 240, 18, lg(0, 0, 0, 18, [[0, "#2c3658"], [.55, "#4c6090"], [1, "#405080"]]));
+      for (let x = 0; x < 240; x += 12) { Q(x, 0, .5, 18, "rgba(16,18,40,.35)"); Q(x + .5, 0, .5, 18, "rgba(255,255,255,.07)"); }
+      Q(0, 0, 240, 1.5, "#1c2240");
+      Q(0, 18, 240, 8, lg(0, 18, 0, 26, [[0, "#4e3230"], [1, "#2c1a1e"]])); Q(0, 18, 240, 1, lg(0, 18, 0, 19, [[0, "#c8965e"], [1, "#6e4a34"]]));
+      for (let x = 2; x < 240; x += 20) { Q(x, 20, 17, 4, "rgba(0,0,0,.22)"); Q(x + .5, 20.5, 16, .5, "rgba(255,220,180,.10)"); }
+      Q(0, 25.5, 240, 2.5, "#1a1220");
+      // windows: a daytime city with glass reflections
+      WINDOWS.forEach(([wx, ww]) => {
+        Q(wx - 2, 3.5, ww + 4, 18.5, lg(0, 3.5, 0, 22, [[0, "#9aa6c8"], [1, "#3a4466"]]));
+        Q(wx, 5, ww, 15, lg(0, 5, 0, 20, [[0, "#3f7fd8"], [1, "#b8dcff"]]));
+        for (let i = 0; i < 9; i++) { const bx = wx + i * 5.3, bh = 4 + (i * 7 % 5) * 1.5; Q(bx, 20 - bh - 2, 4, bh + 2, "rgba(120,150,205,.55)"); }
+        for (let i = 0; i < 7; i++) { const bx = wx + 1 + i * 6.6, bh = 3 + (i * 5 % 4) * 1.6; Q(bx, 20 - bh, 5, bh, "rgba(60,84,132,.85)");
+          for (let k = 0; k < bh - 1; k += 1.5) Q(bx + 1 + (k * 3 % 3), 20 - bh + .5 + k, .5, .5, "rgba(255,230,150,.85)"); }
+        X.save(); X.beginPath(); X.rect(wx, 5, ww, 15); X.clip(); X.fillStyle = "rgba(255,255,255,.16)";
+        X.beginPath(); X.moveTo(wx + 6, 5); X.lineTo(wx + 14, 5); X.lineTo(wx + 4, 20); X.lineTo(wx - 4, 20); X.closePath(); X.fill(); X.restore();
+        Q(wx + ww / 2 - 1, 5, 2, 15, lg(wx + ww / 2 - 1, 0, wx + ww / 2 + 1, 0, [[0, "#f4f6ff"], [1, "#9aa6c8"]])); Q(wx, 12, ww, 1, "#e8ecf8");
+        Q(wx - 2.5, 21, ww + 5, 1.5, lg(0, 21, 0, 22.5, [[0, "#f0f2fa"], [1, "#8a96b8"]]));
+      });
+      // floor: glossy walnut planks with staggered joints and a little tone variation per board
+      Q(0, 28, 240, 132, lg(0, 28, 0, 160, [[0, "#6a3c2c"], [1, "#8e5838"]]));
+      for (let y = 28, row = 0; y < 160; y += 4, row++) {
+        for (let x = -((row * 13) % 29), k = 0; x < 240; x += 29, k++) {
+          const v = ((row * 7 + k * 11) % 5) / 5;
+          Q(x, y, 29, 4, v > .5 ? "rgba(255,214,170," + (v * .07).toFixed(3) + ")" : "rgba(30,10,20," + ((.5 - v) * .12).toFixed(3) + ")");
+          Q(x, y + .5, .5, 3, "rgba(40,16,16,.45)");
+        }
+        Q(0, y + 3.5, 240, .5, "rgba(36,14,14,.40)"); Q(0, y, 240, .5, "rgba(255,220,180,.07)");
+        for (let x = (row * 17) % 23; x < 240; x += 23) Q(x, y + 1.5, 6, .5, "rgba(60,26,18,.20)");
+      }
+      Q(0, 28, 240, 8, lg(0, 28, 0, 36, [[0, "rgba(10,6,30,.45)"], [1, "rgba(10,6,30,0)"]]));
+      // window reflections on the gloss and a soft light shaft
+      WINDOWS.forEach(([wx, ww]) => {
+        Q(wx, 28, ww, 36, lg(0, 28, 0, 64, [[0, "rgba(200,225,255,.16)"], [1, "rgba(200,225,255,0)"]]));
+        X.fillStyle = lg(0, 28, 0, 96, [[0, "rgba(255,236,190,.16)"], [1, "rgba(255,236,190,0)"]]);
+        X.beginPath(); X.moveTo(wx, 28); X.lineTo(wx + ww, 28); X.lineTo(wx + ww + 30, 96); X.lineTo(wx + 30, 96); X.closePath(); X.fill();
+      });
+      // boardroom: plum carpet with a fine weave, a red runner to the board, glass side walls
+      Q(BR.x0, 28, BR.x1 - BR.x0, BR.front - 28, lg(0, 28, 0, BR.front, [[0, "#30244c"], [1, "#4a3a6c"]]));
+      for (let y = 29; y < BR.front; y += 2) for (let x = BR.x0 + (y % 4 ? 1 : 2); x < BR.x1; x += 2) Q(x, y, .5, .5, "rgba(255,255,255,.05)");
+      Q(BR.x0, 28, BR.x1 - BR.x0, 5, lg(0, 28, 0, 33, [[0, "rgba(8,4,24,.5)"], [1, "rgba(8,4,24,0)"]]));
+      Q(BR.door0 + 1, 28, BR.door1 - BR.door0 - 2, BR.front - 28, lg(BR.door0, 0, BR.door1, 0, [[0, "#7a2424"], [.5, "#b84038"], [1, "#7a2424"]]));
+      for (let y = 30; y < BR.front; y += 4) Q(BR.door0 + 4, y, BR.door1 - BR.door0 - 8, .5, "rgba(40,0,0,.25)");
+      Q(BR.door0 + 2, 28, .5, BR.front - 28, "#e8b860"); Q(BR.door1 - 2.5, 28, .5, BR.front - 28, "#e8b860");
+      [[BR.x0, 2], [BR.x1 - 2, -3]].forEach(([x, off]) => {
+        Q(x + off, 28, 3, BR.front - 28, "rgba(160,205,255,.18)");
+        Q(x, 26, 2, BR.front - 26, lg(x, 0, x + 2, 0, [[0, "#c8d2ea"], [1, "#4a5478"]]));
+      });
+      // the board: glossy whiteboard on a metal frame, with a marker tray
+      Q(89.5, 2.5, 61, 23, lg(0, 2.5, 0, 25.5, [[0, "#d8deee"], [1, "#59647e"]]));
+      Q(92, 5, 56, 18, lg(0, 5, 0, 23, [[0, "#ffffff"], [1, "#e4e8f0"]]));
+      X.fillStyle = "rgba(255,255,255,.55)"; X.beginPath(); X.moveTo(120, 5); X.lineTo(132, 5); X.lineTo(118, 23); X.lineTo(106, 23); X.closePath(); X.fill();
+      Q(96, 25, 48, 1.5, lg(0, 25, 0, 26.5, [[0, "#e8ecf6"], [1, "#7a86a6"]]));
+      [["#e04848", 100], ["#3a6ae0", 104], ["#30a860", 108]].forEach(([c, x]) => Q(x, 24, 3, 1, c));
+      // clock
+      X.beginPath(); X.arc(168, 11, 6.5, 0, Math.PI * 2); X.fillStyle = lg(0, 4.5, 0, 17.5, [[0, "#d8deee"], [1, "#3a4466"]]); X.fill();
+      X.beginPath(); X.arc(168, 11, 5.5, 0, Math.PI * 2); X.fillStyle = "#fbfaf6"; X.fill();
+      for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; Q(168 + Math.cos(a) * 4.5 - .25, 11 + Math.sin(a) * 4.5 - .25, .5, .5, "#3a4466"); }
+      // water cooler
+      Q(62, 22, 10, 12, lg(62, 0, 72, 0, [[0, "#f0f2f8"], [1, "#a4aec4"]]));
+      Q(63, 12, 8, 10, lg(63, 0, 71, 0, [[0, "rgba(140,200,255,.9)"], [1, "rgba(70,140,220,.9)"]])); Q(64, 13, 1.5, 7, "rgba(255,255,255,.7)");
+      Q(65, 25, 4, 1.5, "#4a5478"); softShadow(67, 34, 7, 2, .35);
+      // conference table: chairs, glossy walnut top, laptops and papers
+      softShadow(177, 48, 25, 3.5, .45);
+      [158, 169, 180, 191].forEach(cx => { Q(cx, 29, 6, 6.5, lg(cx, 29, cx, 35.5, [[0, "#5a5070"], [1, "#221c30"]])); Q(cx + .5, 29.5, 5, .5, "rgba(255,255,255,.25)"); });
+      Q(155, 35, 44, 12.5, "#21100c"); Q(156, 36, 42, 8, lg(0, 36, 0, 44, [[0, "#8a5034"], [1, "#5a2e1e"]])); Q(156, 44, 42, 2.5, lg(0, 44, 0, 46.5, [[0, "#3a1c12"], [1, "#24100a"]]));
+      X.fillStyle = "rgba(255,230,200,.18)"; X.beginPath(); X.moveTo(166, 36); X.lineTo(176, 36); X.lineTo(170, 44); X.lineTo(160, 44); X.closePath(); X.fill();
+      [[161, "#2a6fd0"], [187, "#2a8a6a"]].forEach(([lx, c]) => { Q(lx, 37, 8, 4.5, lg(0, 37, 0, 41.5, [[0, "#e4e8f2"], [1, "#9aa4bc"]])); Q(lx + .5, 37.5, 7, 3, lg(0, 37.5, 0, 40.5, [[0, c], [1, "#9fd0ff"]])); });
+      Q(176, 38, 6, 4, "#f6f2e8"); for (let i = 0; i < 3; i++) Q(177, 39 + i, 4, .5, "#c8c0b0");
+      Q(183.5, 37.5, 2, 2.5, "#f0eaf4"); Q(185.5, 38, .5, 1, "#f0eaf4");
+      // plants
+      [[6, 30], [226, 30], [4, 140], [228, 140]].forEach(([x, y]) => {
+        softShadow(x + 4, y + 15.5, 6, 2, .4);
+        Q(x + .5, y + 8, 7, 7, lg(x, 0, x + 8, 0, [[0, "#e08a5c"], [1, "#8a3e2a"]])); Q(x, y + 8, 8, 1.5, "#c86a44");
+        [[x + 4, y + 2, 4.5, "#1e5a3a"], [x + 2, y + 4, 3.5, "#2f7a46"], [x + 6, y + 4, 3.5, "#2f7a46"], [x + 4, y - 1, 3, "#46a05a"], [x + 2.5, y + 1, 2, "#6cc070"]].forEach(([cx, cy, r, c]) => {
+          X.beginPath(); X.ellipse(cx, cy, r, r * .8, 0, 0, Math.PI * 2); X.fillStyle = c; X.fill(); });
+        Q(x + 3, y - 2, 1, .5, "rgba(220,255,200,.8)");
+      });
+      // vignette and a warm grade, laid over everything each frame
+      psVignette = document.createElement("canvas"); psVignette.width = 480; psVignette.height = 320;
+      const v = psVignette.getContext("2d"); v.setTransform(2, 0, 0, 2, 0, 0);
+      const vg = v.createRadialGradient(120, 84, 50, 120, 84, 165); vg.addColorStop(0, "rgba(8,6,24,0)"); vg.addColorStop(1, "rgba(8,6,24,.5)");
+      v.fillStyle = vg; v.fillRect(0, 0, 240, 160); v.fillStyle = "rgba(255,190,140,.05)"; v.fillRect(0, 0, 240, 160);
+      X = ctx;
+    }
+    function roomPS2(){
+      if (!psBg) bakePS2();
+      X = ctx;
+      ctx.drawImage(psBg, 0, 0, 240, 160);
+      // drifting clouds
+      WINDOWS.forEach(([wx, ww]) => {
+        ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip(); ctx.fillStyle = "rgba(255,255,255,.85)";
+        const cx = wx + ((t * 3 + wx) % (ww + 16)) - 10;
+        [[0, 8, 4, 1.8], [3, 7, 3.5, 2.2], [6, 8, 3.5, 1.6]].forEach(([dx, cy, rx, ry]) => { ctx.beginPath(); ctx.ellipse(cx + dx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); });
+        ctx.restore();
+      });
+      ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#2a2f48";
+      ctx.fillText(round ? "R" + round : "TO DO", 95, 7);
+      marks.slice(-14).forEach((c, i) => Q(95 + (i % 7) * 7, 16 + Math.floor(i / 7) * 3, 5, 2, c));
+      const a = t * .5; ctx.strokeStyle = "#2a2f48"; ctx.lineWidth = .6; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168, 7.5); ctx.stroke();
+      ctx.strokeStyle = "#d83838"; ctx.lineWidth = .4; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168 + Math.cos(a) * 4.5, 11 + Math.sin(a) * 4.5); ctx.stroke();
+      glow(165, 39, 9, "rgba(120,180,255,1)", .25); glow(191, 39, 9, "rgba(120,220,190,1)", .22);
+      if (!reduce) WINDOWS.forEach(([wx]) => { for (let i = 0; i < 6; i++) {
+        const k = (t * 4 + i * 11) % 60; Q(wx + 6 + i * 7 + k * .45, 30 + k, .5, .5, "rgba(255,240,210," + (.5 - k / 140).toFixed(2) + ")"); } });
+    }
+    function cubicleBackPS(s){
+      X = ctx; const y0 = s.dtop - 24;
+      [[s.dx - 19, 7], [s.dx + 6, 13]].forEach(([x, w]) => {
+        Q(x, y0, w, 1.5, lg(0, y0, 0, y0 + 1.5, [[0, "#f4f6fc"], [1, "#9aa6c0"]]));
+        Q(x, y0 + 1.5, w, 6.5, lg(0, y0 + 1.5, 0, y0 + 8, [[0, "#6a7aa6"], [1, "#46527c"]]));
+        for (let i = .5; i < w; i += 1.5) Q(x + i, y0 + 2.5 + (i * 2 % 3), .5, .5, "rgba(20,24,60,.25)");
+        Q(x, y0 + 8, w, 1, "#22263e"); softShadow(x + w / 2, y0 + 9.5, w / 2 + 1, 1.2, .35);
+      });
+      [[s.dx + 8, 3, "#f8e488"], [s.dx + 13, 2.5, "#f8a8b0"], [s.dx - 17, 2.5, "#a8e0f8"]].forEach(([x, w, c], i) => {
+        Q(x + .5, y0 + 3.5, w, w, "rgba(0,0,0,.25)"); Q(x, y0 + 3, w, w, c); Q(x + w / 2 - .25, y0 + 3, .5, .5, i ? "#3a6ae0" : "#e04848"); });
+    }
+    function cubicleSidesPS(s){
+      X = ctx; const y0 = s.dtop - 24, yEnd = s.dtop + 4;
+      [[s.dx - 19, 1], [s.dx + 16, -1]].forEach(([x, inward]) => {
+        softShadow(inward > 0 ? x + 4 : x - 1, (y0 + yEnd) / 2 + 4, 2, (yEnd - y0) / 2 + 4, .25);
+        Q(x, y0, 3, yEnd - y0, lg(x, 0, x + 3, 0, inward > 0 ? [[0, "#8494bc"], [1, "#4a5680"]] : [[0, "#4a5680"], [1, "#8494bc"]]));
+        Q(inward > 0 ? x : x + 2.5, y0, .5, yEnd - y0, "#eef2fa");
+        Q(x, yEnd, 3, 8, lg(0, yEnd, 0, yEnd + 8, [[0, "#6a7aa6"], [1, "#424e78"]])); Q(x, yEnd, 3, 1, "#f4f6fc"); Q(x, yEnd + 8, 3, .5, "#22263e");
+      });
+    }
+    function glassFrontPS(){
+      X = ctx;
+      [[BR.x0, BR.door0 - BR.x0], [BR.door1, BR.x1 - BR.door1]].forEach(([x, w]) => {
+        Q(x, 53.5, w, 5.5, lg(0, 53.5, 0, 59, [[0, "rgba(190,225,255,.36)"], [1, "rgba(150,195,245,.20)"]]));
+        ctx.save(); ctx.beginPath(); ctx.rect(x, 53.5, w, 5.5); ctx.clip(); ctx.fillStyle = "rgba(255,255,255,.45)";
+        for (let gx = x + 3; gx < x + w; gx += 14) { ctx.beginPath(); ctx.moveTo(gx, 53.5); ctx.lineTo(gx + 1.5, 53.5); ctx.lineTo(gx - 2, 59); ctx.lineTo(gx - 3.5, 59); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+        Q(x, 52, w, 1.5, lg(0, 52, 0, 53.5, [[0, "#eef2fa"], [1, "#5a6688"]])); Q(x, 59, w, 1, "#2a2f48");
+        for (let px = x; px < x + w; px += 19) Q(px, 52, .5, 8, "#3a4466");
+      });
+      [BR.door0, BR.door1 - 2].forEach(x => Q(x, 46, 2, 14, lg(x, 0, x + 2, 0, [[0, "#eef2fa"], [1, "#4a5478"]])));
+    }
+    function deskPS(s, busy){
+      X = ctx; const x = s.dx - 14, y = s.dtop;
+      softShadow(s.dx, y + 13.5, 17, 2.5, .5);
+      Q(x - .5, y - .5, 29, 13.5, "#24120e");
+      Q(x, y, 28, 4, lg(0, y, 0, y + 4, [[0, "#d8a46c"], [1, "#a8704a"]])); Q(x, y, 28, .5, "rgba(255,240,210,.8)");
+      X.fillStyle = "rgba(255,240,220,.20)"; X.beginPath(); X.moveTo(x + 4, y); X.lineTo(x + 9, y); X.lineTo(x + 7, y + 4); X.lineTo(x + 2, y + 4); X.closePath(); X.fill();
+      Q(x, y + 4, 28, 8, lg(0, y + 4, 0, y + 12, [[0, "#7a4630"], [1, "#4a2a1e"]])); Q(x + 2, y + 7, 24, .5, "rgba(20,8,8,.45)"); Q(x + 12.5, y + 8.5, 3, .8, "#e8c08a");
+      Q(s.dx - 7, y + 1, 9, 2, lg(0, y + 1, 0, y + 3, [[0, "#4a5070"], [1, "#22263a"]]));
+      for (let i = 0; i < 8; i++) Q(s.dx - 6.5 + i, y + 1.5, .5, .5, "rgba(220,228,255,.6)");
+      Q(x + 1, y - 2, 3, 3, lg(x + 1, 0, x + 4, 0, [[0, "#ffffff"], [1, "#c8c2d8"]])); Q(x + 1.5, y - 2, 2, .5, "#5a2e1e");
+      if (busy && !reduce) for (let i = 0; i < 2; i++) { const k = (t * 6 + i * 5) % 8; Q(x + 2 + Math.sin(k + i) * .6, y - 3 - k, .5, .5, "rgba(255,255,255," + (.6 - k / 14).toFixed(2) + ")"); }
+      Q(s.dx + 3, y - 9, 11, 8, lg(0, y - 9, 0, y - 1, [[0, "#3a4062"], [1, "#151828"]]));
+      Q(s.dx + 4, y - 8, 9, 6, busy ? lg(0, y - 8, 0, y - 2, [[0, "#9fe4ff"], [1, "#3a8ad8"]]) : lg(0, y - 8, 0, y - 2, [[0, "#2a4a78"], [1, "#16263e"]]));
+      if (busy) { for (let i = 0; i < 3; i++) Q(s.dx + 5, y - 7 + i * 1.6, 2 + ((Math.floor(t * 3) + i * 2) % 5), .6, "rgba(255,255,255,.85)"); glow(s.dx + 8.5, y - 4, 12, "rgba(120,200,255,1)", .35); }
+      else Q(s.dx + 4.5, y - 7.5, 3, .5, "rgba(255,255,255,.25)");
+      Q(s.dx + 7.5, y - 1, 2, 1.5, "#22263a"); Q(s.dx + 6, y + .2, 5, .8, "#3a4062");
+    }
+    function bubblePS(x, y, type){
+      X = ctx; const bx = x - 7, by = y - 27;
+      softShadow(x + 1, by + 11, 8, 2, .3);
+      ctx.beginPath(); ctx.moveTo(bx + 2, by - 1); ctx.lineTo(bx + 12, by - 1); ctx.quadraticCurveTo(bx + 15, by - 1, bx + 15, by + 2); ctx.lineTo(bx + 15, by + 8);
+      ctx.quadraticCurveTo(bx + 15, by + 11, bx + 12, by + 11); ctx.lineTo(x + 2, by + 11); ctx.lineTo(x, by + 13); ctx.lineTo(x - 1, by + 11); ctx.lineTo(bx + 2, by + 11);
+      ctx.quadraticCurveTo(bx - 1, by + 11, bx - 1, by + 8); ctx.lineTo(bx - 1, by + 2); ctx.quadraticCurveTo(bx - 1, by - 1, bx + 2, by - 1); ctx.closePath();
+      ctx.fillStyle = lg(0, by - 1, 0, by + 11, [[0, "#ffffff"], [1, "#dfe6f6"]]); ctx.fill(); ctx.strokeStyle = "#2a2f48"; ctx.lineWidth = .6; ctx.stroke();
+      if (type === "dots") { const n = Math.floor(t * 3) % 4; for (let i = 0; i < n; i++) { ctx.beginPath(); ctx.arc(bx + 4 + i * 3, by + 6, .9, 0, Math.PI * 2); ctx.fillStyle = "#2a2f48"; ctx.fill(); } }
+      else if (type === "bang") { Q(x - .75, by + 1.5, 1.5, 5, "#e04848"); Q(x - .75, by + 7.5, 1.5, 1.5, "#e04848"); }
+      else if (type === "check") { ctx.strokeStyle = "#30a860"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(bx + 4, by + 5); ctx.lineTo(bx + 6.5, by + 7.5); ctx.lineTo(bx + 11, by + 2.5); ctx.stroke(); }
+      else if (type === "cross") { ctx.strokeStyle = "#e04848"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(bx + 4, by + 2); ctx.lineTo(bx + 10, by + 8); ctx.moveTo(bx + 10, by + 2); ctx.lineTo(bx + 4, by + 8); ctx.stroke(); }
+      else if (type === "star") { ctx.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 1.8 : 4, a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(x + Math.cos(a) * r, by + 5 + Math.sin(a) * r); } ctx.closePath(); ctx.fillStyle = "#f8c838"; ctx.fill(); ctx.strokeStyle = "#b8862a"; ctx.lineWidth = .4; ctx.stroke(); }
+    }
     function room(){
+      if (isPS2()) return roomPS2();
       if (isMatrix()) { roomMatrix(); return glassSides(); }
       if (isTactics()) { roomTactics(); return glassSides(); }
       return roomOffice();
@@ -896,6 +1132,7 @@ fieldset:disabled .lock{display:block}
       R(x, y, 8, 9, "#1e4a3e"); R(x + 1, y + 1, 6, 7, "#2f7a46"); R(x + 2, y - 3, 4, 5, "#46a05a"); R(x + 1, y + 2, 2, 2, "#7cc86c"); R(x + 3, y - 2, 1, 1, "#b4e890"); R(x + 5, y + 5, 2, 2, "#246040");
     }
     function desk(s, busy){
+      if (isPS2()) return deskPS(s, busy);
       const x = s.dx - 14, y = s.dtop;
       if (isTactics()) {
         R(x - 1, y - 1, 30, 14, "#2a1e14"); R(x, y, 28, 4, "#8a5a32"); R(x, y + 4, 28, 8, "#6b4424"); R(x + 2, y + 6, 24, 1, "#4a2e18");
@@ -921,6 +1158,7 @@ fieldset:disabled .lock{display:block}
       R(s.dx + 7, y - 2, 3, 2, "#2a2f48"); R(s.dx + 6, y - 1, 5, 1, "#46527a");
     }
     function bubble(x, y, type){
+      if (isPS2()) return bubblePS(x, y, type);
       const bx = x - 7, by = y - 27, m = isMatrix(), edge = m ? "#3cff6b" : isTactics() ? "#3a2a1a" : "#283040", fill = m ? "#021a08" : isTactics() ? "#f0e2bc" : "#fff";
       R(bx - 1, by - 1, 16, 12, edge); R(bx, by, 14, 10, fill); R(x - 1, by + 10, 3, 2, edge); R(x, by + 10, 1, 1, fill);
       if (type === "dots") { const n = Math.floor(t * 3) % 4; for (let i = 0; i < n; i++) R(bx + 3 + i * 3, by + 6, 2, 2, m ? "#3cff6b" : "#283040"); }
@@ -939,9 +1177,12 @@ fieldset:disabled .lock{display:block}
       const breathe = !moving && !n.away && !reduce && Math.sin(t * 2 + n.idx * 1.7) > .6 ? 1 : 0;
       const jump = n.bubble === "star" && !reduce ? -Math.round(Math.abs(Math.sin(t * 7 + n.idx)) * 3) : 0;
       const x = Math.round(n.x), y = Math.round(n.y);
-      ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(x - (n.mini ? 3 : 5), y - 1, n.mini ? 6 : 10, 2);
-      if (n.mini) { ctx.drawImage(miniSprite(n.pal, moving && !reduce ? 1 + Math.floor(t * 8) % 2 : 0), x - 4, y - 12 + jump); if (n.bubble) bubble(x, y + 3 + jump, n.bubble); return; }
-      ctx.drawImage(charSprite(n.pal, n.dir, frame, pose, blink), x - 8, y - 20 + breathe + jump);
+      const ps = isPS2();
+      if (ps) { X = ctx; softShadow(x, y, n.mini ? 4 : 6.5, n.mini ? 1.4 : 2, .5); }
+      else { ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(x - (n.mini ? 3 : 5), y - 1, n.mini ? 6 : 10, 2); }
+      if (n.mini) { const m = miniSprite(n.pal, moving && !reduce ? 1 + Math.floor(t * 8) % 2 : 0); ctx.drawImage(ps ? hiSprite(m) : m, x - 4, y - 12 + jump, MW, MH); if (n.bubble) bubble(x, y + 3 + jump, n.bubble); return; }
+      const sp = charSprite(n.pal, n.dir, frame, pose, blink);
+      ctx.drawImage(ps ? hiSprite(sp) : sp, x - 8, y - 20 + breathe + jump, CW, CH);
       if (n.bubble) bubble(x, y - 5 + breathe + jump, n.bubble);
     }
 
@@ -969,6 +1210,7 @@ fieldset:disabled .lock{display:block}
       items.push({ z: BR.front, cub: glassFront });
       items.sort((a, b) => a.z - b.z).forEach(it => it.cub ? it.cub(it.s) : it.desk ? desk(it.n.home, !it.n.away) : drawNpc(it.n));
       confetti.forEach(c => R(Math.round(c.x), Math.round(c.y), 2, 2, c.c));
+      if (isPS2() && psVignette) ctx.drawImage(psVignette, 0, 0, 240, 160);
       requestAnimationFrame(step);
     }
     requestAnimationFrame(step);
@@ -986,7 +1228,7 @@ fieldset:disabled .lock{display:block}
     }
     function setClaude(agent){ claude.agent = agent; claude.show = !!agent; if (!agent) { claude.path = []; claude.x = CLAUDE_SPOT.x; claude.y = CLAUDE_SPOT.y; } }
     // re-dress everyone for the current skin; positions and paths don't change
-    function reskin(){ npcs.forEach(n => n.pal = palFor(n.agent)); interns.forEach(n => n.pal = Object.assign({}, n.pal, internPal())); claude.pal = claudePal(); }
+    function reskin(){ applyRes(); npcs.forEach(n => n.pal = palFor(n.agent)); interns.forEach(n => n.pal = Object.assign({}, n.pal, internPal())); claude.pal = claudePal(); }
     // interns: suits in the Matrix, squire tunics in Tactics
     const internPal = () => isMatrix() ? { kind: "agent", shirt: "#1e2326", tie: "#3cff6b" } : isTactics() ? { kind: "squire", shirt: "#b08a50", tie: "#6b4424" } : { kind: undefined, tie: undefined };
     return { reskin, spawnInterns, internsBack, setClaude, claudeVisit, sync, toBoard, toDesk, allHome, celebrate, setRound(r){ round = r; }, mark(c){ marks.push(c); }, clearMarks(){ marks = []; round = 0; }, npc: i => npcs[i] };
@@ -1973,8 +2215,8 @@ Every recommendation must say why: the target search phrase and intent, the data
   function showClaude(){ scene.setClaude(inboxReady() || isMatrix() ? CLAUDE : null); }
   function applySkin(){
     document.documentElement.dataset.skin = skin;
-    document.querySelector(".brand").innerHTML = "AI RELAY <b>" + (({ matrix: "MATRIX", tactics: "TACTICS" })[skin] || "OFFICE") + "</b>";
-    document.querySelector('meta[name="theme-color"]').content = ({ matrix: "#020a04", tactics: "#2a2230" })[skin] || "#3f3b8f";
+    document.querySelector(".brand").innerHTML = "AI RELAY <b>" + (({ matrix: "MATRIX", tactics: "TACTICS", ps2: "PS2" })[skin] || "OFFICE") + "</b>";
+    document.querySelector('meta[name="theme-color"]').content = ({ matrix: "#020a04", tactics: "#2a2230", ps2: "#0a0e24" })[skin] || "#3f3b8f";
     $("run").textContent = isTactics() ? "○" : "A"; $("stop").textContent = isTactics() ? "×" : "B";
     $("skin").value = skin;
     scene.reskin(); showClaude(); renderTeam();
@@ -1983,6 +2225,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     skin = SKINS.includes($("skin").value) ? $("skin").value : "office"; store.set("skin", skin); applySkin();
     say("RELAY", null, isMatrix() ? "Welcome to the real world. Same team, same jobs. Neo is here when you need Claude."
       : isTactics() ? "The war council gathers. Knights judge, Black Mages write, White Mages advise. Press ○ to begin."
+      : isPS2() ? "Welcome to the hi-res office. Same team, same desks, now with glass, gloss and city views."
       : "Back to the office!");
   });
 
