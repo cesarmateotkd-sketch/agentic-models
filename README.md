@@ -53,6 +53,10 @@ If a playbook's provider has no key, that teammate moves to one you've connected
 
 **The log** keeps long turns folded to a few lines (tap **MORE** to read one in full) and shows errors as one short line (tap **DETAILS** for the provider's full message). The final result always shows in full.
 
+**Context: General or Strand** (under the playbook). General tasks get no Strand background, so you can use the team for anything. Strand tasks also get Claude's latest Strand briefing: priorities, verified facts with study links, current numbers and mistakes to avoid, kept up to date by Claude. Strand playbooks and jobs from Claude always use Strand.
+
+**When a model is busy or out of free quota**, it rests (until midnight UTC for daily limits) and the teammate moves to a backup model for that run, whatever their role. ⚙ → Connections shows resting models with a RESET button. If no model at all can write the draft, tap **ASK CLAUDE INSTEAD** (jobs from Claude go back to Claude automatically).
+
 **History** keeps your last 20 runs, saved step by step, so locking the phone or closing the app doesn't lose work. If the phone locks during a model call, the app retries that call once when you come back.
 
 **⚙ (top right)** holds the skin, the Mission, your keys (Connections) and the custom team (Team).

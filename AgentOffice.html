@@ -121,6 +121,12 @@ a{color:var(--helper)}
 .turn pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.5 var(--body)}
 .turn .copy{margin-top:10px}
 .turn .more{margin-top:8px}
+.ctx-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:inline-flex;border:2px solid var(--win-edge);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;box-shadow:none;padding:8px 12px;font:9px var(--px);background:transparent;color:var(--muted);min-height:36px}
+.seg button[aria-checked="true"]{background:var(--win-edge);color:var(--win)}
+.seg button:disabled{opacity:1}
+.rest{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:13px/1.35 var(--body);color:var(--muted)}
 .turn.clip pre{max-height:6em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 50%,transparent);mask-image:linear-gradient(#000 50%,transparent)}
 .shots{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .shots a{display:block;text-decoration:none}
@@ -236,6 +242,14 @@ fieldset:disabled .lock{display:block}
         <select id="playbook"></select>
       </label>
       <div class="small" id="pbHint"></div>
+      <div class="ctx-row">
+        <span class="small">Context</span>
+        <div class="seg" role="radiogroup" aria-label="Context for this task">
+          <button type="button" role="radio" id="ctxGeneral">GENERAL</button>
+          <button type="button" role="radio" id="ctxStrand">STRAND</button>
+        </div>
+      </div>
+      <div class="small" id="ctxHint"></div>
       <textarea id="task" aria-label="Task details" placeholder="e.g. Write 3 TikTok hook ideas for an anime edit account, under 12 words each"></textarea>
       <div class="row" style="align-items:center">
         <label style="flex:0 1 130px" id="roundsLabel">Max rounds
@@ -260,7 +274,7 @@ fieldset:disabled .lock{display:block}
   <details class="win" id="missionPanel">
     <summary>Mission <span class="hint" id="missionState"></span></summary>
     <div class="stack">
-      <div class="small">Background every teammate reads before a task. Your task always comes first: when they conflict, the team follows the task. It isn't used for Change the app requests or for the decision summary.</div>
+      <div class="small">Background every teammate reads before a Strand task (Context: STRAND), together with Claude's latest Strand briefing. General tasks don't get it. Your task always comes first: when they conflict, the team follows the task. It isn't used for Change the app requests or for the decision summary.</div>
       <label class="check"><input type="checkbox" id="missionOn"> Use the mission</label>
       <textarea id="missionText" aria-label="Mission text" style="min-height:220px"></textarea>
       <div class="row"><button type="button" id="missionReset">Reset to default</button></div>
@@ -312,7 +326,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.5";
+  const APP_VERSION = "2026-10-28.6";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -376,6 +390,13 @@ fieldset:disabled .lock{display:block}
 
   function renderConns(){
     const box = $("conns"); box.textContent = "";
+    saveHealth();
+    const keys = Object.keys(health);
+    if (keys.length) {
+      const reset = el("button", { type: "button", className: "tiny", textContent: "RESET" });
+      reset.onclick = () => { keys.forEach(k => delete health[k]); saveHealth(); renderConns(); };
+      box.appendChild(el("div", { className: "rest" }, el("span", { textContent: "Resting: " + keys.map(k => k.split("/").slice(1).join("/") + " (" + health[k].why + " until " + new Date(health[k].until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ")").join(", ") }), reset));
+    }
     for (const pid in PROVIDERS) {
       const P = PROVIDERS[pid], c = conn[pid];
       const chip = el("span", { id: "chip-" + pid });
@@ -1255,6 +1276,34 @@ fieldset:disabled .lock{display:block}
     say(a.name, a.role, said || `I'm ${a.name}, the ${a.title || a.role}. I run on ${PROVIDERS[a.provider]?.name || "?"} (${a.model}).`);
   }
 
+  /* ================= model health ================= */
+  // A model that hits a rate limit or quota rests until it should work again, so the next turn goes
+  // straight to a backup instead of failing first. Daily quotas rest until midnight UTC.
+  const health = store.get("health", {});
+  const saveHealth = () => { const now = Date.now(); for (const k in health) if (health[k].until <= now) delete health[k]; store.set("health", health); };
+  const hkey = a => a.provider + "/" + a.model;
+  const resting = a => (health[hkey(a)]?.until || 0) > Date.now();
+  function markSick(a, err){
+    if (!err || err.name === "AbortError" || isNetErr(err)) return;
+    const m = String(err.message), now = Date.now();
+    let until = 0, why = "";
+    if (/per[- ]?day|daily|quota|free-models-per-day|exceeded your current/i.test(m)) { const d = new Date(); d.setUTCHours(24, 0, 30, 0); until = d.getTime(); why = "daily limit"; }
+    else if (err.status === 429 || err.status === 503 || err.status === 529 || /rate limit|high demand|overloaded/i.test(m)) { until = now + Math.max(120, (err.retryAfter || 0) + 5) * 1000; why = /high demand|overloaded/i.test(m) ? "busy" : "rate limit"; }
+    else if (err.status === 401 || err.status === 403) { until = now + 30 * 60000; why = "key refused"; }
+    else if (err.status === 400 || err.status === 404) { until = now + 30 * 60000; why = "model unavailable"; }
+    else if (err.timedOut) { until = now + 5 * 60000; why = "too slow"; }
+    if (until) { health[hkey(a)] = { until, why }; saveHealth(); }
+  }
+  const restLabel = a => { const h = health[hkey(a)]; return h ? h.why + ", back " + new Date(h.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
+  // backups for one teammate: models that can see images for an image reviewer; otherwise other free models on
+  // the same provider (when its list is loaded), then each connected provider's default
+  function backupsFor(a){
+    if (a.vision) return VISION_BACKUPS.slice();
+    const same = a.provider === "openrouter" && modelLists.openrouter ? modelLists.openrouter.filter(m => /:free$/.test(m) && m !== a.model).slice(0, 2).map(m => ({ provider: "openrouter", model: m })) : [];
+    return same.concat(["groq", "gemini", "mistral", "openrouter"].map(p => ({ provider: p, model: PROVIDERS[p].def })));
+  }
+  const pickBackup = (a, tried) => backupsFor(a).find(o => o.model && !tried.includes(o.provider + "/" + o.model) && hasKey(o.provider) && !resting(o));
+
   /* ================= calling models ================= */
   const CALL_TIMEOUT = 180000;
   const stripThink = t => String(t).replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim();
@@ -1304,7 +1353,7 @@ fieldset:disabled .lock{display:block}
     const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, CALL_TIMEOUT);
     try { return await callAgentOnce(a, userMsg, ctl.signal, images); }
     catch (e) {
-      if (timedOut && !runSignal.aborted) throw new Error(a.name + " took longer than " + CALL_TIMEOUT / 60000 + " minutes to answer.");
+      if (timedOut && !runSignal.aborted) throw Object.assign(new Error(a.name + " took longer than " + CALL_TIMEOUT / 60000 + " minutes to answer."), { timedOut: true });
       throw e;
     } finally { clearTimeout(timer); runSignal.removeEventListener("abort", onAbort); }
   }
@@ -1429,6 +1478,7 @@ fieldset:disabled .lock{display:block}
     $("pbHint").textContent = pb ? pb.hint + " " + pb.crew.map(a => a.name + " (" + a.title + ")").join(" + ") + "." : "Runs the team you set up under ⚙ Settings.";
     $("task").placeholder = pb ? pb.placeholder : "e.g. Write 3 TikTok hook ideas for an anime edit account, under 12 words each";
     $("roundsLabel").hidden = !!pb;
+    if (typeof paintCtx === "function") paintCtx();
   }
   $("playbook").addEventListener("change", onPlaybook);
   // models that accept images, in the order a failed image reviewer tries them
@@ -1518,6 +1568,7 @@ Rules that are never broken:
 - Plain, warm, expert tone. Specific beats clever.
 
 Every recommendation must say why: the target search phrase and intent, the data behind it (or "no data given"), why this over the alternatives, and what is still unverified. Claude checks facts against PubMed and does the final build. Your job is sharp drafts and honest reasoning.`;
+  const MISSION_CORE = "STRAND MISSION (core): Strand (hairtypequiz.hair) wants more visitors and more Amazon affiliate income; its edge is trust and real evidence, not hype. Readers: people with curly and coily hair, especially type 4. Don't compete with Strand's own posts: name any overlap and how they stay different. Every recommendation says why: the search phrase and intent, the data behind it (or \"no data given\"), why this over the alternatives, and what is still unverified. Plain, warm, expert tone.";
   const mission = Object.assign({ on: true, text: DEFAULT_MISSION }, store.get("mission", {}));
   const saveMission = () => { store.set("mission", mission); $("missionState").textContent = mission.on && mission.text.trim() ? "ON" : "OFF"; };
   let activeMission = "";
@@ -1528,6 +1579,51 @@ Every recommendation must say why: the target search phrase and intent, the data
   saveMission();
   const missionFor = a => activeMission && a.title !== "Decision summary"
     ? "\n\nBACKGROUND MISSION (context only; the owner's task and your instructions always come first, and if they conflict, follow the task):\n" + activeMission : "";
+
+  /* ================= context: General or Strand ================= */
+  // General tasks get no Strand background. Strand tasks get the mission plus Claude's latest briefing.
+  // Strand playbooks and jobs from Claude are Strand; Change the app is always General.
+  const STRAND_PLAYBOOKS = ["pins", "outline", "factcheck", "compliance", "visual", "critique"];
+  let ctxMode = store.get("context", "general") === "strand" ? "strand" : "general";
+  function ctxFor(pbKey, job){
+    if (pbKey === "appchange") return { mode: "general", why: "Change the app always runs without Strand background." };
+    if (job) return job.context === "general" ? { mode: "general", why: "Set by Claude's job." } : { mode: "strand", why: "Jobs from Claude get the Strand briefing." };
+    if (STRAND_PLAYBOOKS.includes(pbKey)) return { mode: "strand", why: "Strand playbooks always get the Strand briefing." };
+    return { mode: ctxMode, why: "" };
+  }
+  function paintCtx(){
+    const pbKey = $("playbook").value, c = ctxFor(pbKey, null), locked = !!c.why;
+    [["ctxGeneral", "general"], ["ctxStrand", "strand"]].forEach(([id, m]) => { $(id).setAttribute("aria-checked", String(c.mode === m)); $(id).disabled = locked && c.mode !== m; });
+    const b = briefing.data;
+    $("ctxHint").textContent = c.mode === "general" ? (c.why || "General: no Strand background. Good for anything that isn't the hair site.")
+      : (c.why ? c.why + " " : "") + "Uses the mission" + (b ? " + Claude's briefing (updated " + b.updated + ")." : " (Claude's briefing loads when the run starts).");
+  }
+  [["ctxGeneral", "general"], ["ctxStrand", "strand"]].forEach(([id, m]) => $(id).addEventListener("click", () => { if ($(id).disabled) return; ctxMode = m; store.set("context", m); paintCtx(); if (m === "strand") loadBriefing(); }));
+
+  /* ----- Strand briefing: a short JSON file Claude keeps current on this site (briefing/strand.json) ----- */
+  const briefing = { data: store.get("briefing", null), at: 0 };
+  const BRIEF_MAX = 3200;
+  async function loadBriefing(){
+    if (Date.now() - briefing.at < 60000 && briefing.data) return briefing.data;
+    try {
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 6000);
+      const r = await fetch("briefing/strand.json?t=" + Date.now(), { cache: "no-store", signal: ctl.signal });
+      clearTimeout(tm);
+      const j = r.ok ? await r.json() : null;
+      if (j && j.updated) { briefing.data = j; briefing.at = Date.now(); store.set("briefing", j); }
+    } catch {}
+    paintCtx();
+    return briefing.data;
+  }
+  function briefingText(pbKey){
+    const b = briefing.data; if (!b) return "";
+    const sec = (t, list) => Array.isArray(list) && list.length ? t + ":\n" + list.map(x => "- " + x).join("\n") : "";
+    const slice = b.playbooks?.[pbKey] || b.playbooks?.custom;
+    let out = ["STRAND BRIEFING from Claude (updated " + b.updated + "). Treat these verified facts and numbers as more current than your own memory; if something isn't here or in the task, say it's unverified instead of guessing.",
+      sec("Priorities", b.priorities), sec("This task type", slice), sec("Avoid", b.avoid), sec("Rules", b.rules), sec("Verified facts", b.facts), sec("Latest data", b.data)].filter(Boolean).join("\n\n");
+    if (out.length > BRIEF_MAX) out = out.slice(0, BRIEF_MAX).replace(/\n[^\n]*$/, "") + "\n[briefing trimmed]";
+    return out;
+  }
 
   /* ================= decision summary ================= */
   // After every run, one extra call explains why the team landed where it did, using only what was said in the run.
@@ -1593,7 +1689,11 @@ Every recommendation must say why: the target search phrase and intent, the data
     if (controller) return;
     const pbKey = $("playbook").value, pb = PLAYBOOKS[pbKey];
     const crew = pb ? buildCrew(pb) : team.slice();
-    activeMission = mission.on && pbKey !== "appchange" ? mission.text.trim() : "";
+    const ctxNow = ctxFor(pbKey, job);
+    if (ctxNow.mode === "strand") await loadBriefing();
+    // the unedited default mission mostly repeats the briefing, so only its core goes along with it (fewer tokens, fewer rate limits)
+    const missionPart = !mission.on ? "" : mission.text.trim() === DEFAULT_MISSION.trim() && briefing.data ? MISSION_CORE : mission.text.trim();
+    activeMission = ctxNow.mode === "strand" ? [missionPart, briefingText(pbKey)].filter(Boolean).join("\n\n") : "";
     const task = pb ? input + "\n\n" + pb.brief + "\n\n" + (pb.rules || BRAND_RULES) : input;
     const missing = [...new Set(crew.filter(a => a.provider === "custom" ? !conn.custom.base : !conn[a.provider].key).map(a => PROVIDERS[a.provider].name))];
     if (missing.length) { openSettings("connPanel"); status.className = "status err"; status.textContent = "Add a key for " + missing.join(", ") + " under ⚙ Connections."; return; }
@@ -1664,27 +1764,32 @@ Every recommendation must say why: the target search phrase and intent, the data
           if (sig.aborted) throw new DOMException("Stopped", "AbortError");
           const npc = scene.npc(i);
           status.textContent = "ROUND " + r + "/" + rounds + " · " + a.name.toUpperCase();
-          let res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
-          // a playbook writer whose model fails gets one more try on another connected provider
-          if (res.err && res.err.name !== "AbortError" && pb && a.role === "builder") {
-            // a writer that reads images only moves to a model that can see them
-            const alts = a.vision ? VISION_BACKUPS : ["groq", "gemini", "mistral", "openrouter"].map(p => ({ provider: p, model: PROVIDERS[p].def }));
-            const tried = [a.provider + "/" + a.model];
-            // an image reviewer tries every model that can see images; any other writer gets one more try
-            for (let k = 0; k < (a.vision ? alts.length : 1) && res.err && res.err.name !== "AbortError"; k++) {
-              const alt = alts.find(o => !tried.includes(o.provider + "/" + o.model) && (a.vision || o.provider !== a.provider) && hasKey(o.provider));
-              const why = isNetErr(res.err) ? "couldn't reach " + PROVIDERS[a.provider].name : res.err.message;
-              if (!alt) {
-                if (a.vision) res.err = new Error(why + " Image review needs a model that can see images (Gemini, or Mistral with a key). Try again in a minute.");
-                break;
-              }
-              tried.push(alt.provider + "/" + alt.model);
-              skipped.push({ name: a.name, msg: why });
-              logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, why + " Trying " + PROVIDERS[alt.provider].name + " " + alt.model + " instead.");
-              crew[i] = a = Object.assign({}, a, alt);
-              res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
+          const tried = [hkey(a)];
+          // a model that's resting (rate limit, daily quota) is skipped up front for the rest of this run
+          if (resting(a)) {
+            const alt = pickBackup(a, tried);
+            if (alt) {
+              logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, a.model + " is resting (" + restLabel(a) + "). Using " + PROVIDERS[alt.provider].name + " " + alt.model + " for " + a.name + ".");
+              tried.push(alt.provider + "/" + alt.model); crew[i] = a = Object.assign({}, a, alt);
             }
           }
+          let res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
+          // any teammate whose model fails tries backups: up to 2 for text, every image-capable model for an image reviewer
+          for (let k = 0; k < (a.vision ? VISION_BACKUPS.length : 2) && res.err && res.err.name !== "AbortError"; k++) {
+            markSick(a, res.err);
+            const alt = pickBackup(a, tried);
+            const why = isNetErr(res.err) ? "couldn't reach " + PROVIDERS[a.provider].name : res.err.message;
+            if (!alt) {
+              if (a.vision) res.err = new Error(why + " Image review needs a model that can see images (Gemini, or Mistral with a key). Try again in a minute.");
+              break;
+            }
+            tried.push(alt.provider + "/" + alt.model);
+            skipped.push({ name: a.name, msg: why });
+            logTurn("error", a.name + " · R" + r, PROVIDERS[a.provider].name, why + " Trying " + PROVIDERS[alt.provider].name + " " + alt.model + " instead.");
+            crew[i] = a = Object.assign({}, a, alt);
+            res = await takeTurn(a, npc, buildPrompt(a, task, turns, r));
+          }
+          if (res.err) markSick(a, res.err);
           if (res.err) {
             if (res.err.name === "AbortError") throw res.err;
             failures++;
@@ -1715,6 +1820,7 @@ Every recommendation must say why: the target search phrase and intent, the data
       // never pass a judge's checklist off as the deliverable: with no draft there is nothing to send
       // an image review nobody could run: the owner picks the image instead (the card goes to the top)
       if (!draft && pb?.images && imgUrls.length) addSelfPick(job, imgUrls);
+      else if (!draft && crew.some(a => a.role === "builder")) offerClaude({ task: input, job, playbook: pb?.label, skipped, crew });
       if (!draft) throw new Error(crew.some(a => a.role === "builder")
         ? "No draft: the writer failed every time. " + (skipped.length ? "Last error: " + skipped[skipped.length - 1].msg : "Check the log.") + (pb?.images && imgUrls.length ? " You can pick the image yourself: the card is at the top." : "")
         : "No teammate produced a reply. Check the log.");
@@ -1726,11 +1832,12 @@ Every recommendation must say why: the target search phrase and intent, the data
       let why = null;
       if (turns.length > 1 || ARTICLE_PLAYBOOKS.includes(pbKey)) {
         status.textContent = "WRITING THE DECISION SUMMARY…";
-        const p = ["groq", "gemini", "mistral", "openrouter", "custom"].find(hasKey);
-        if (p) {
-          const scribe = { name: "Scribe", title: "Decision summary", role: "helper", provider: p, model: PROVIDERS[p].def || crew[0].model, prompt: SUMMARY_PROMPT };
-          try { why = await ask(scribe, summaryRequest(task, turns, verdictLineFor(), skipped, pbKey)); }
-          catch (e) { if (e.name === "AbortError") throw e; why = "(No summary this time: " + (isNetErr(e) ? "couldn't reach " + PROVIDERS[p].name : e.message) + ")"; }
+        const scribes = ["groq", "gemini", "mistral", "openrouter", "custom"].filter(hasKey)
+          .map(p => ({ name: "Scribe", title: "Decision summary", role: "helper", provider: p, model: PROVIDERS[p].def || crew[0].model, prompt: SUMMARY_PROMPT }))
+          .filter(sc => sc.model && !resting(sc)).slice(0, 2);
+        for (const scribe of scribes) {
+          try { why = await ask(scribe, summaryRequest(task, turns, verdictLineFor(), skipped, pbKey)); break; }
+          catch (e) { if (e.name === "AbortError") throw e; markSick(scribe, e); why = "(No summary this time: " + (isNetErr(e) ? "couldn't reach " + PROVIDERS[scribe.provider].name : e.message) + ")"; }
         }
       }
       Object.assign(run, { status: approved ? "approved" : "done", calls, verdictLine, approved, round: done, skipped, why,
@@ -1813,7 +1920,7 @@ Every recommendation must say why: the target search phrase and intent, the data
   const saveJobs = () => { store.set("jobs", jobs); renderJobs(); };
   function addJob(j){
     if (!j || !j.id || !j.task || jobs.some(x => x.id === String(j.id))) return null;
-    const job = { id: String(j.id).slice(0, 60), title: String(j.title || j.id).slice(0, 120), playbook: PLAYBOOKS[j.playbook] ? j.playbook : "",
+    const job = { id: String(j.id).slice(0, 60), title: String(j.title || j.id).slice(0, 120), playbook: PLAYBOOKS[j.playbook] ? j.playbook : "", context: j.context === "general" ? "general" : "strand",
       task: String(j.task).slice(0, 8000), at: Date.now(), status: "new" };
     jobs.unshift(job); jobs = jobs.slice(0, 30); saveJobs();
     return job;
@@ -2133,6 +2240,28 @@ Every recommendation must say why: the target search phrase and intent, the data
     ];
     return parts.filter(Boolean).join("\n\n").slice(0, 60000);
   }
+  // when no model could write the draft, the task goes to Claude instead: automatically for a job from Claude,
+  // otherwise with one tap. Claude does it directly and replies here.
+  function offerClaude({ task, job, playbook, skipped, crew }){
+    const body = [INBOX_MARK, "### Relay Office handoff", job ? "**Job:** `" + job.id + "` " + job.title : "", playbook ? "**Playbook:** " + playbook : "",
+      "**Task**\n" + quote(task),
+      "**Outcome:** The team couldn't produce a draft: every model it tried failed. Please do this task directly.",
+      skipped?.length ? "**Problems during the run**\n" + skipped.map(x => "- " + x.name + ": " + x.msg).join("\n") : "",
+      "**Team:** " + crew.map(a => a.name + " (" + a.role + ", " + PROVIDERS[a.provider].name + " " + a.model + ")").join("; ")].filter(Boolean).join("\n\n").slice(0, 60000);
+    const btn = el("button", { type: "button", className: "tiny", textContent: "ASK CLAUDE INSTEAD" }), st = el("div", { className: "status" });
+    const lt = logTurn("error", "NO DRAFT", "", "Every model the team tried failed, so there's nothing to send. Claude can do this task directly.");
+    btn.onclick = async () => {
+      if (!inboxReady()) { st.className = "status err"; st.textContent = "Set up the Claude inbox under ⚙ first."; return; }
+      btn.disabled = true; st.className = "status"; st.textContent = "SENDING…";
+      try {
+        const c = await ghFetch(gh("/issues/" + inbox.pr + "/comments"), { method: "POST", body: JSON.stringify({ body }) });
+        inbox.seen.push(c.id); saveInbox(); btn.textContent = "SENT"; st.className = "status ok"; st.textContent = "CLAUDE HAS IT · THE REPLY SHOWS UP HERE";
+        if (job) { job.status = "sent"; saveJobs(); }
+      } catch (e) { btn.disabled = false; st.className = "status err"; st.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message; }
+    };
+    lt.art.append(btn, st);
+    if (job && inboxReady()) setTimeout(() => btn.onclick(), 0);
+  }
   function handoffControls(ctx, onSent, auto){
     const note = el("textarea", { placeholder: "Note for Claude (optional), e.g. “Use this as the intro for Post 57”" });
     note.setAttribute("aria-label", "Note for Claude");
@@ -2239,6 +2368,7 @@ Every recommendation must say why: the target search phrase and intent, the data
   // ask the browser not to evict saved keys under storage pressure (granted at its discretion; harmless if not)
   navigator.storage?.persist?.().catch(() => {});
   onPlaybook(); renderJobs(); renderHistory(); store.set("runs", runs);
+  loadBriefing();
   applySkin();
   if (inboxReady()) pollInbox();
   checkUpdate();

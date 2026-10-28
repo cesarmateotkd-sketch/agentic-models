@@ -13,7 +13,7 @@ Single-file static app (`AgentOffice.html`) on GitHub Pages, used from an iPhone
 
 ## Saved data must survive every update
 The user's keys persist across app updates only because the storage names stay the same. When changing the app:
-- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns; `jobs` also holds merge cards with `type: "merge"`), `skin` (`office`, `matrix`, `tactics` or `ps2`), `mission` (`{on, text}`: the shared mission brief).
+- Don't rename the `relay2.` prefix or these keys: `conn` (provider keys by provider id), `inbox` (GitHub token, repo, PR, seen comments), `team4` (each teammate, including its `delegate` flag), `interns` (intern switch, provider, model, call budget), `task`, `connParked`, `playbook` (last playbook picked), `jobs` (jobs from Claude and their status), `runs` (last 20 runs with their turns; `jobs` also holds merge cards with `type: "merge"`), `skin` (`office`, `matrix`, `tactics` or `ps2`), `mission` (`{on, text}`: the shared mission brief), `context` (`general` or `strand`, the task box switch), `health` (models resting after a rate limit or quota, by `provider/model`, with `until` and `why`), `briefing` (the last Strand briefing fetched, for offline use).
 - Don't rename provider ids (`openrouter`, `groq`, `gemini`, `mistral`, `custom`). If a provider is removed, its saved key is parked in `connParked` and comes back if the id returns.
 - If a shape has to change, read the old one and migrate it on load, then test with data saved by the previous version (see the upgrade test below).
 - The site must stay at the same origin (`cesarmateotkd-sketch.github.io`). Moving to another domain starts with empty storage.
@@ -33,6 +33,7 @@ Post a comment on PR #1 (as the owner's account, which is how the GitHub tools p
 ```
 
 - `playbook` is one of `pins`, `outline`, `factcheck`, `compliance`, `visual`, `critique`, `appchange`, or empty for the owner's custom team.
+- Jobs run with the Strand briefing by default. Add `"context": "general"` for a job that isn't about Strand.
 - `id` must be new; a repeated id is ignored. Put all the context the team needs in `task` (data, links, notes).
 - For `critique`, include image links in `task`. Use images from this repo (the `review-images` branch via raw.githubusercontent.com, or GitHub Pages), because the app downloads them in the browser and both allow that.
 - When the owner runs a job, the result comes back automatically as a handoff with a `**Job:**` line naming the id.
@@ -49,8 +50,11 @@ Strand backlog (top first; update it as items close):
 3. "Crawled, not indexed" posts (4A routine, how to wash 4C, protective styles, how to find your hair type, scalp care, baggy method): what sets each apart, or which to merge (custom-team job with each page's URL and its closest rival)
 4. Pins for Post 56 (silk press at home), if the owner still needs them
 
-### Mission
-⚙ → Mission holds a shared brief (the Strand mission by default) that is added to every teammate's system prompt as background. It always yields to the owner's task, and it's left out of "Change the app" runs and the decision summary. The owner set it as the main mission on Oct 27, 2026, with the condition that it must not interfere with their other commands. Keep that precedence wording if you change it.
+### Mission, context and the Strand briefing
+⚙ → Mission holds a shared brief (the Strand mission by default). It always yields to the owner's task, and it's left out of "Change the app" runs and the decision summary. The owner set it as the main mission on Oct 27, 2026, with the condition that it must not interfere with their other commands. Keep that precedence wording if you change it.
+- **Context switch (owner request, Oct 28, 2026):** the task box has GENERAL / STRAND. General tasks get no Strand background. Strand tasks get the mission plus the Strand briefing. Strand playbooks and jobs from Claude are always Strand; Change the app is always General.
+- **Strand briefing:** `briefing/strand.json` on the Pages site, maintained by Claude. The app fetches it fresh when a Strand run starts and gives every teammate a short version (priorities, the slice for that playbook, things to avoid, rules, verified facts, latest data), capped at about 3,200 characters. While the owner's mission is the unedited default, only a short mission core goes along with it, to save tokens on free-tier limits.
+- **Keep the briefing current:** update it after every finished Strand job or merge and with each weekly GSC check: dates on every number, PubMed IDs on every fact, corrections of earlier mistakes under `avoid`. Keep it under the cap and bump `updated`. It's a data file, not app code, but it still goes to `main`, so follow the owner's rule on pushing to `main`.
 
 ### Decision summaries (owner request, Oct 27, 2026)
 The owner wants to know why a decision was made, above all for articles posted on Strand.
@@ -69,6 +73,11 @@ The owner wants to know why a decision was made, above all for articles posted o
   - the evidence used: PubMed links, plus what was marked "not studied" and why
   - what the free team suggested and what you kept, changed or dropped, with the reason
   - open risks or anything still unverified
+
+### Reliability (owner request, Oct 28, 2026)
+- A model that fails with a rate limit, quota, refused key or missing model "rests": daily quotas until midnight UTC, others for a few minutes. Resting models are skipped up front; ⚙ → Connections lists them with a RESET button.
+- Every teammate (any role, playbooks and the custom team) falls back to up to 2 backups: other free OpenRouter models when the list is loaded, then each connected provider's default. Image reviewers only use models that can see images.
+- When no model can write a draft, the app hands the task to Claude: automatically for a job from Claude, otherwise with ASK CLAUDE INSTEAD. That handoff's outcome says "The team couldn't produce a draft". Do the task directly and reply with the result.
 
 ### Merge approvals from the app
 The owner can approve a preview from the app instead of typing "merge it" in the Claude app (the owner asked for this on Oct 27, 2026).
