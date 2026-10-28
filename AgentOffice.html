@@ -301,7 +301,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.3";
+  const APP_VERSION = "2026-10-28.4";
   const SKINS = ["office", "matrix", "tactics"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics";
@@ -791,31 +791,110 @@ fieldset:disabled .lock{display:block}
       const f = Math.floor(t * 8) % 3;
       R(x + 2, y - 5 + (f === 1 ? 1 : 0), 4, 4, "#f08030"); R(x + 3, y - 7 + f % 2, 2, 3, "#f8e048");
     }
-    function room(){
-      if (isMatrix()) return roomMatrix();
-      if (isTactics()) return roomTactics();
-      for (let y = 28; y < 160; y += 8) for (let x = 0; x < 240; x += 8) R(x, y, 8, 8, ((x + y) / 8) % 2 ? "#e4d0a4" : "#dcc494");
-      for (let y = 28; y < 160; y += 16) R(0, y, 240, 1, "#ccb07e");
-      R(0, 0, 240, 26, "#9cc4e4"); R(0, 0, 240, 3, "#7aa4cc"); R(0, 24, 240, 4, "#58789c");
+    /* cubicles and boardroom, drawn around the fixed desk spots and walking paths:
+       cubicle walls stop short of the aisles and the x=120 column, and the boardroom's glass front opens on that column.
+       Style notes from the PS1/PS2 era (Symphony of the Night, Suikoden II, Final Fantasy Tactics):
+       hue-shifted ramps (cool plum shadows, warm highlights), colored outlines, contact shadows, light pools and small props. */
+    const BR = { x0: 72, x1: 202, front: 60, door0: 109, door1: 131 };
+    const panelPal = () => isMatrix() ? { line: "#050805", cap: "#3cff6b", capShade: "#1f7a35", face: "#1a241c", shade: "#10180f", pin: ["#3cff6b", "#c8ffd2", "#1fa83f"] }
+      : isTactics() ? { line: "#2a1e14", cap: "#e8c060", capShade: "#a88038", face: "#8a5a32", shade: "#6b4424", pin: ["#efe2bf", "#b8283a", "#2c4f9e"] }
+      : { line: "#2a2f48", cap: "#e4e8f0", capShade: "#a4aec4", face: "#6f80a6", shade: "#56638c", pin: ["#f4e27a", "#f4a0a0", "#9ad8f4"] };
+    const glassPal = () => isMatrix() ? { frame: "#1a201b", hi: "#3cff6b", tint: "rgba(60,255,107,.10)", glint: "#8dffa6" }
+      : isTactics() ? { frame: "#2a2220", hi: "#e8c060", tint: "rgba(232,192,96,.14)", glint: "#fff6d8" }
+      : { frame: "#2a2f48", hi: "#c8d6ea", tint: "rgba(170,215,255,.30)", glint: "#ffffff" };
+    // back wall of a cubicle, with the gap its owner walks through from the aisle
+    function cubicleBack(s){
+      const P = panelPal(), y0 = s.dtop - 24;
+      [[s.dx - 19, 7], [s.dx + 6, 13]].forEach(([x, w]) => {
+        R(x, y0, w, 1, P.cap); R(x, y0 + 1, w, 1, P.capShade); R(x, y0 + 2, w, 6, P.face); R(x, y0 + 7, w, 1, P.shade); R(x, y0 + 8, w, 1, P.line);
+        for (let i = 1; i < w; i += 3) R(x + i, y0 + 3 + (i % 3), 1, 1, P.shade);
+        ctx.fillStyle = "rgba(40,24,60,.18)"; ctx.fillRect(x, y0 + 9, w, 1);
+      });
+      R(s.dx + 8, y0 + 3, 3, 3, P.pin[(s.dx / 4 | 0) % 3]); R(s.dx + 13, y0 + 2, 3, 2, P.pin[(s.dx / 4 + 1 | 0) % 3]); R(s.dx - 17, y0 + 3, 2, 3, P.pin[(s.dx / 4 + 2 | 0) % 3]);
+    }
+    // side walls: a thin rail running back to the aisle, and an end face toward us
+    function cubicleSides(s){
+      const P = panelPal(), y0 = s.dtop - 24, yEnd = s.dtop + 4;
+      [[s.dx - 19, 1], [s.dx + 16, -1]].forEach(([x, inward]) => {
+        R(x, y0, 3, yEnd - y0, P.face); R(x + (inward > 0 ? 2 : 0), y0, 1, yEnd - y0, P.shade); R(x + (inward > 0 ? 0 : 2), y0, 1, yEnd - y0, P.cap);
+        for (let y = y0 + 3; y < yEnd; y += 4) R(x + 1, y, 1, 1, P.shade);
+        R(x, yEnd, 3, 8, P.face); R(x, yEnd, 3, 1, P.cap); R(x + (inward > 0 ? 2 : 0), yEnd + 1, 1, 7, P.shade); R(x, yEnd + 8, 3, 1, P.line);
+        ctx.fillStyle = "rgba(40,24,60,.16)"; ctx.fillRect(inward > 0 ? x + 3 : x - 1, y0 + 2, 1, yEnd - y0 + 7);
+      });
+    }
+    // the boardroom's glass front, drawn in depth order so people inside stand behind it
+    function glassFront(){
+      const G = glassPal();
+      [[BR.x0, BR.door0 - BR.x0], [BR.door1, BR.x1 - BR.door1]].forEach(([x, w]) => {
+        ctx.fillStyle = G.tint; ctx.fillRect(x, 54, w, 5);
+        R(x, 52, w, 1, G.hi); R(x, 53, w, 1, G.frame); R(x, 59, w, 1, G.frame);
+        for (let gx = x + 4; gx < x + w - 2; gx += 11) { R(gx, 55, 1, 1, G.glint); R(gx + 1, 56, 1, 1, G.glint); }
+        for (let px = x; px < x + w; px += 19) R(px, 52, 1, 8, G.frame);
+      });
+      R(BR.door0, 46, 2, 14, G.frame); R(BR.door1 - 2, 46, 2, 14, G.frame); R(BR.door0, 46, 2, 1, G.hi); R(BR.door1 - 2, 46, 2, 1, G.hi);
+    }
+    function glassSides(){
+      const G = glassPal();
+      [[BR.x0, 2], [BR.x1 - 2, -3]].forEach(([x, off]) => {
+        ctx.fillStyle = G.tint; ctx.fillRect(x + off, 28, 3, BR.front - 28);
+        R(x, 26, 2, BR.front - 26, G.frame); R(x, 26, 2, 1, G.hi);
+      });
+    }
+    function roomOffice(){
+      // floor: warm planks, staggered joints and grain; seams shift toward plum instead of plain dark brown
+      for (let y = 28, row = 0; y < 160; y += 6, row++) {
+        R(0, y, 240, 6, row % 2 ? "#c8905e" : "#c08656"); R(0, y, 240, 1, "#dcab74"); R(0, y + 5, 240, 1, "#8a5646");
+        for (let x = (row * 23) % 37; x < 240; x += 37) R(x, y + 1, 1, 4, "#8a5646");
+        for (let x = (row * 7) % 13; x < 240; x += 13) R(x, y + 2 + (x + row) % 3, 3, 1, "#b07a50");
+      }
+      // wall: cool blue-grey with a darker wainscot, ceiling shadow and a contact shadow at the floor
+      R(0, 0, 240, 26, "#7090b2"); for (let x = 3; x < 240; x += 6) R(x, 2, 1, 16, "#6688aa");
+      R(0, 0, 240, 2, "#4c6488"); R(0, 18, 240, 8, "#4e5f86"); R(0, 18, 240, 1, "#93acca"); R(0, 25, 240, 1, "#2c3456"); R(0, 26, 240, 2, "#2a2f48");
+      ctx.fillStyle = "rgba(40,24,60,.18)"; ctx.fillRect(0, 28, 240, 2);
       [[10, 46], [184, 46]].forEach(([wx, ww]) => {
-        R(wx - 2, 4, ww + 4, 17, "#283040"); R(wx, 5, ww, 15, "#c8ecff"); R(wx, 15, ww, 5, "#a8dcf8");
+        R(wx - 2, 4, ww + 4, 17, "#2a2f48"); R(wx, 5, ww, 6, "#a8dcfc"); R(wx, 11, ww, 4, "#c8ecff"); R(wx, 15, ww, 5, "#e2f6ff");
         const cx = wx + ((t * 4 + wx) % (ww + 10)) - 8;
         ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip(); R(cx, 8, 8, 3, "#fff"); R(cx + 2, 6, 5, 2, "#fff"); ctx.restore();
-        R(wx + ww / 2 - 1, 5, 2, 15, "#f8f8f8"); R(wx, 12, ww, 1, "#f8f8f8");
+        R(wx + ww / 2 - 1, 5, 2, 15, "#f4f0ff"); R(wx, 12, ww, 1, "#f4f0ff"); R(wx - 2, 21, ww + 4, 2, "#a4aec4");
+        // a warm pool of daylight on the floor
+        ctx.fillStyle = "rgba(255,232,180,.12)";
+        ctx.beginPath(); ctx.moveTo(wx, 28); ctx.lineTo(wx + ww, 28); ctx.lineTo(wx + ww + 26, 78); ctx.lineTo(wx + 26, 78); ctx.closePath(); ctx.fill();
       });
-      R(90, 3, 60, 22, "#283040"); R(91, 4, 58, 20, "#6878a0"); R(92, 5, 56, 18, "#fafaf4");
-      ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#283040";
+      // boardroom: plum carpet with a diamond weave, a runner from the door to the board, glass walls
+      R(BR.x0, 28, BR.x1 - BR.x0, BR.front - 28, "#4a3a62");
+      for (let y = 30; y < BR.front; y += 6) for (let x = BR.x0 + 3 + (y % 12 ? 3 : 0); x < BR.x1 - 2; x += 6) R(x, y, 2, 2, "#5a4876");
+      ctx.fillStyle = "rgba(20,12,36,.28)"; ctx.fillRect(BR.x0, 28, BR.x1 - BR.x0, 3);
+      R(BR.door0 + 1, 28, BR.door1 - BR.door0 - 2, BR.front - 28, "#a44a40"); R(BR.door0 + 2, 28, 1, BR.front - 28, "#d8a048"); R(BR.door1 - 3, 28, 1, BR.front - 28, "#d8a048");
+      for (let y = 31; y < BR.front; y += 5) R(BR.door0 + 5, y, BR.door1 - BR.door0 - 10, 1, "#8a3a36");
+      glassSides();
+      // the board: same spot and text as before
+      R(90, 3, 60, 22, "#2a2f48"); R(91, 4, 58, 20, "#7b88b4"); R(92, 5, 56, 18, "#f6f4ec"); R(92, 5, 56, 1, "#ffffff"); R(92, 22, 56, 1, "#dcd8cc");
+      R(96, 25, 48, 2, "#a4aec4"); R(100, 24, 3, 1, "#d83838"); R(104, 24, 3, 1, "#2f5bd8"); R(108, 24, 3, 1, "#30a860");
+      ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#2a2f48";
       ctx.fillText(round ? "R" + round : "TO DO", 95, 7);
       marks.slice(-14).forEach((c, i) => R(95 + (i % 7) * 7, 16 + Math.floor(i / 7) * 3, 5, 2, c));
-      R(162, 5, 12, 12, "#283040"); R(163, 6, 10, 10, "#fff"); R(167, 7, 1, 4, "#283040");
+      R(162, 5, 12, 12, "#2a2f48"); R(163, 6, 10, 10, "#fdfaf2"); R(167, 7, 1, 4, "#2a2f48");
       const a = t * .5; R(167 + Math.round(Math.cos(a) * 3), 10 + Math.round(Math.sin(a) * 3), 1, 1, "#d83838");
-      R(100, 32, 40, 18, "#b84848"); R(102, 34, 36, 14, "#d86060"); R(104, 36, 32, 10, "#e88080");
       plant(6, 30); plant(226, 30); plant(4, 140); plant(228, 140);
-      R(159, 35, 36, 12, "#283040"); R(160, 36, 34, 5, "#d0945c"); R(160, 41, 34, 5, "#9c6438");
-      R(165, 37, 6, 3, "#fff"); R(181, 37, 5, 3, "#fff"); R(175, 36, 3, 3, "#d84890");
-      R(62, 14, 10, 20, "#283040"); R(63, 15, 8, 8, "#88c8f0"); R(63, 23, 8, 10, "#e8e8e8"); R(64, 16, 2, 4, "#c8ecff");
+      // conference table where the interns work: dark walnut, chairs on the far side, laptops and papers
+      ctx.fillStyle = "rgba(40,24,60,.25)"; ctx.fillRect(156, 47, 42, 3);
+      [158, 169, 180, 191].forEach(cx => { R(cx, 29, 6, 6, "#2a2f48"); R(cx + 1, 30, 4, 4, "#46527a"); R(cx + 1, 30, 4, 1, "#6a78a4"); });
+      R(155, 35, 44, 13, "#3a2438"); R(156, 36, 42, 8, "#7a4a34"); R(156, 36, 42, 1, "#a4683e"); R(156, 44, 42, 3, "#4e2c2a"); R(157, 39, 40, 1, "#6c3e30");
+      R(162, 37, 7, 4, "#c8d0e0"); R(163, 38, 5, 2, "#58c8f8"); R(176, 38, 6, 4, "#f4efe4"); R(177, 39, 4, 1, "#c8c0b0"); R(188, 37, 7, 4, "#c8d0e0"); R(189, 38, 5, 2, "#3a5878");
+      R(184, 37, 2, 3, "#e8e2f0"); R(186, 38, 1, 1, "#e8e2f0");
+      // water cooler, outside the boardroom
+      R(62, 14, 10, 20, "#2a2f48"); R(63, 15, 8, 8, "#88c8f0"); R(63, 23, 8, 10, "#e8e8f0"); R(64, 16, 2, 4, "#c8ecff"); R(63, 32, 8, 1, "#a4aec4");
     }
-    function plant(x, y){ R(x, y + 8, 8, 7, "#283040"); R(x + 1, y + 9, 6, 5, "#b85c38"); R(x, y, 8, 9, "#2e8a40"); R(x + 2, y - 3, 4, 5, "#48b058"); R(x + 1, y + 2, 2, 2, "#68d070"); }
+    function room(){
+      if (isMatrix()) { roomMatrix(); return glassSides(); }
+      if (isTactics()) { roomTactics(); return glassSides(); }
+      return roomOffice();
+    }
+    function plant(x, y){
+      ctx.fillStyle = "rgba(40,24,60,.22)"; ctx.fillRect(x, y + 15, 9, 2);
+      R(x, y + 8, 8, 7, "#3a2438"); R(x + 1, y + 9, 6, 5, "#b8603e"); R(x + 1, y + 9, 6, 1, "#d88a58"); R(x + 5, y + 10, 2, 4, "#8a3e2e");
+      R(x, y, 8, 9, "#1e4a3e"); R(x + 1, y + 1, 6, 7, "#2f7a46"); R(x + 2, y - 3, 4, 5, "#46a05a"); R(x + 1, y + 2, 2, 2, "#7cc86c"); R(x + 3, y - 2, 1, 1, "#b4e890"); R(x + 5, y + 5, 2, 2, "#246040");
+    }
     function desk(s, busy){
       const x = s.dx - 14, y = s.dtop;
       if (isTactics()) {
@@ -832,8 +911,14 @@ fieldset:disabled .lock{display:block}
         R(s.dx + 7, y - 2, 3, 2, "#0b0f0c");
         return;
       }
-      R(x - 1, y - 1, 30, 14, "#283040"); R(x, y, 28, 4, "#d0945c"); R(x, y + 4, 28, 8, "#9c6438"); R(x + 2, y + 6, 24, 1, "#84522c");
-      R(s.dx + 3, y - 9, 11, 9, "#283040"); R(s.dx + 4, y - 8, 9, 6, busy ? (Math.floor(t * 3) % 2 ? "#78e0ff" : "#58c8f8") : "#3a5878"); R(s.dx + 7, y - 2, 3, 2, "#283040");
+      ctx.fillStyle = "rgba(40,24,60,.24)"; ctx.fillRect(x, y + 13, 29, 2);
+      R(x - 1, y - 1, 30, 14, "#3a2438"); R(x, y, 28, 4, "#d8a46a"); R(x, y, 28, 1, "#f0c488"); R(x, y + 4, 28, 8, "#9a5c40"); R(x, y + 4, 28, 1, "#6e3c34");
+      R(x + 2, y + 7, 24, 1, "#7e4636"); R(x + 1, y + 11, 26, 1, "#6e3c34"); R(x + 13, y + 8, 2, 1, "#d8a46a");
+      R(s.dx - 7, y + 1, 9, 2, "#3a3f58"); R(s.dx - 6, y + 1, 7, 1, "#8890a8");
+      R(x + 1, y - 2, 3, 3, "#e8e2f0"); R(x + 4, y - 1, 1, 1, "#e8e2f0"); R(x + 2, y - 2, 1, 1, "#8a5646");
+      R(s.dx + 3, y - 9, 11, 9, "#2a2f48"); R(s.dx + 4, y - 8, 9, 6, busy ? (Math.floor(t * 3) % 2 ? "#78e0ff" : "#58c8f8") : "#34507a");
+      if (busy) for (let i = 0; i < 2; i++) R(s.dx + 5, y - 7 + i * 2, 2 + ((Math.floor(t * 3) + i * 2) % 5), 1, "#e8faff"); else R(s.dx + 5, y - 7, 2, 1, "#5a7aa8");
+      R(s.dx + 7, y - 2, 3, 2, "#2a2f48"); R(s.dx + 6, y - 1, 5, 1, "#46527a");
     }
     function bubble(x, y, type){
       const bx = x - 7, by = y - 27, m = isMatrix(), edge = m ? "#3cff6b" : isTactics() ? "#3a2a1a" : "#283040", fill = m ? "#021a08" : isTactics() ? "#f0e2bc" : "#fff";
@@ -875,10 +960,14 @@ fieldset:disabled .lock{display:block}
       // painter's order by feet/front-edge y: an NPC whose feet are above a desk's front edge is drawn behind it
       const items = [];
       everyone().forEach(n => {
-        if (n.home.desk) items.push({ z: n.home.dtop + 12, desk: true, n });
+        if (n.home.desk) {
+          items.push({ z: n.home.dtop + 12, desk: true, n });
+          items.push({ z: n.home.dtop - 15, cub: cubicleBack, s: n.home }, { z: n.home.dtop + 11.9, cub: cubicleSides, s: n.home });
+        }
         items.push({ z: n.y + (n.away ? .5 : 0), n });
       });
-      items.sort((a, b) => a.z - b.z).forEach(it => it.desk ? desk(it.n.home, !it.n.away) : drawNpc(it.n));
+      items.push({ z: BR.front, cub: glassFront });
+      items.sort((a, b) => a.z - b.z).forEach(it => it.cub ? it.cub(it.s) : it.desk ? desk(it.n.home, !it.n.away) : drawNpc(it.n));
       confetti.forEach(c => R(Math.round(c.x), Math.round(c.y), 2, 2, c.c));
       requestAnimationFrame(step);
     }

@@ -61,6 +61,8 @@ If a playbook's provider has no key, that teammate moves to one you've connected
 
 **Skins:** *Office* (classic) or *Matrix*: same layout, green code rain, agents in suits and sunglasses (their tie shows their role), and Neo, which is Claude, always in the room. The narrator becomes the Operator, and A/B are the red and blue pills. *Tactics (PSX)*: a stone war room with stained glass, a war map, torches and a crystal. Knights judge, Black Mages write and White Mages help, Claude is a blond hero in blue, the menus are parchment, and A/B become ○ and ×.
 
+Every desk sits in its own cubicle, and the whiteboard corner is a glass-walled boardroom with a carpet runner and a conference table where the interns work. The art borrows from the best-loved PS1/PS2 pixel art (Symphony of the Night, Suikoden II, Final Fantasy Tactics): warm highlights and cool shadows, soft contact shadows, window light on the floor and small desk props. Positions and walking paths are the same in every skin.
+
 Characters are 16×20 shaded pixel sprites with front, back and side views. They take a 4-step walk with arm swing, blink and breathe while idle, write on the board during their turn, and jump when the team is approved.
 
 When a provider says it's busy ("try again in 24s", "high demand"), the app waits and retries up to twice, with a countdown in the status line. Limits that don't say how long to wait, or need more than a minute (like a used-up daily quota), aren't retried; the writer moves to another provider instead.
