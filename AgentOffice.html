@@ -231,7 +231,7 @@ fieldset:disabled .lock{display:block}
   <section class="win notice" id="notice" hidden aria-live="assertive"></section>
 
   <section class="win" id="jobsWin" hidden>
-    <h2>Jobs from Claude <span class="hint" id="jobCount"></span></h2>
+    <h2>Jobs for the team <span class="hint" id="jobCount"></span></h2>
     <div class="stack" id="jobs"></div>
   </section>
 
@@ -326,7 +326,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.6";
+  const APP_VERSION = "2026-10-28.7";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -1587,7 +1587,7 @@ Every recommendation must say why: the target search phrase and intent, the data
   let ctxMode = store.get("context", "general") === "strand" ? "strand" : "general";
   function ctxFor(pbKey, job){
     if (pbKey === "appchange") return { mode: "general", why: "Change the app always runs without Strand background." };
-    if (job) return job.context === "general" ? { mode: "general", why: "Set by Claude's job." } : { mode: "strand", why: "Jobs from Claude get the Strand briefing." };
+    if (job) return job.context === "general" ? { mode: "general", why: "Set by Claude's job." } : { mode: "strand", why: (job.from === "muse" ? "Jobs from Muse" : "Jobs from Claude") + " get the Strand briefing." };
     if (STRAND_PLAYBOOKS.includes(pbKey)) return { mode: "strand", why: "Strand playbooks always get the Strand briefing." };
     return { mode: ctxMode, why: "" };
   }
@@ -1917,11 +1917,15 @@ Every recommendation must say why: the target search phrase and intent, the data
   // Claude posts jobs on the inbox PR: a comment with JOB_MARK and a ```json block {id, title, playbook, task}.
   let jobs = store.get("jobs", []), pendingJob = null;
   const JOB_MARK = "<!-- relay-job:v1 -->";
+  // the owner's Muse agent (Meta) posts jobs through its GitHub connector, from the owner's account, tagged with MUSE_MARK
+  // and without the Claude Code footer. They only ever become job cards the owner still has to RUN.
+  const MUSE_MARK = "<!-- relay-muse:v1 -->";
   const saveJobs = () => { store.set("jobs", jobs); renderJobs(); };
-  function addJob(j){
+  function addJob(j, from){
     if (!j || !j.id || !j.task || jobs.some(x => x.id === String(j.id))) return null;
     const job = { id: String(j.id).slice(0, 60), title: String(j.title || j.id).slice(0, 120), playbook: PLAYBOOKS[j.playbook] ? j.playbook : "", context: j.context === "general" ? "general" : "strand",
       task: String(j.task).slice(0, 8000), at: Date.now(), status: "new" };
+    if (from) job.from = from;
     jobs.unshift(job); jobs = jobs.slice(0, 30); saveJobs();
     return job;
   }
@@ -2140,7 +2144,7 @@ Every recommendation must say why: the target search phrase and intent, the data
       del.onclick = () => { jobs = jobs.filter(x => x !== j); saveJobs(); };
       box.appendChild(el("div", { className: "job" + (j.status === "new" ? "" : " done") },
         el("b", { textContent: j.title }),
-        el("div", { className: "small", textContent: (PLAYBOOKS[j.playbook]?.label || "Custom team") + " · " + ({ new: "NEW", done: "DRAFTED", sent: "SENT TO CLAUDE" })[j.status] }),
+        el("div", { className: "small", textContent: (j.from === "muse" ? "FROM MUSE · " : "") + (PLAYBOOKS[j.playbook]?.label || "Custom team") + " · " + ({ new: "NEW", done: "DRAFTED", sent: "SENT TO CLAUDE" })[j.status] }),
         el("div", { className: "small", textContent: j.task.length > 160 ? j.task.slice(0, 160) + "…" : j.task }),
         el("div", { className: "row" }, runBtn, del)));
     });
@@ -2297,6 +2301,15 @@ Every recommendation must say why: the target search phrase and intent, the data
         if (inbox.seen.includes(c.id)) continue;
         inbox.seen.push(c.id);
         const body = c.body || "";
+        // a job from the owner's Muse agent: owner's account, Muse tag, no footer, and nothing that looks like an approval or a pick
+        // anything tagged as Muse is never read as Claude, even if it carries the footer
+        if (body.includes(MUSE_MARK)) {
+          if (c.user?.login === inbox.login && !FOOTER.test(body) && body.includes(JOB_MARK) && !body.includes(APPROVE_MARK) && !body.includes(PICKED_MARK)) {
+            const job = addJob(parseJob(body), "muse");
+            if (job) claudeSays("Muse sent a job for the team: " + job.title + ". It's at the top of the screen. Tap RUN when you're ready.", c.created_at, true);
+          }
+          continue;
+        }
         // only Claude's replies: posted through the owner's account, ending in the Claude Code footer. The repo is public, so ignore anyone else.
         if (body.includes(INBOX_MARK) || c.user?.login !== inbox.login || !FOOTER.test(body)) continue;
         if (body.includes(JOB_MARK)) { const job = addJob(parseJob(body)); if (job) claudeSays("New job for the team: " + job.title + ". It's at the top of the screen. Tap RUN when you're ready.", c.created_at, true); continue; }
