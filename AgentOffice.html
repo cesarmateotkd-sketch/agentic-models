@@ -301,7 +301,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-28.2";
+  const APP_VERSION = "2026-10-28.3";
   const SKINS = ["office", "matrix", "tactics"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics";
@@ -1272,7 +1272,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     setRunning(true);
     if (pb) scene.sync(crew);
     const rounds = pb ? pb.rounds : +$("rounds").value;
-    let images = null;
+    let images = null, imgUrls = [];
     const run = { id: Date.now().toString(36), at: Date.now(), title: (job ? job.title : input.split("\n")[0]).slice(0, 90), playbook: pbKey, jobId: job?.id || null,
       task, status: "running", turns: [], crew: crew.map(({ name, role, provider, model }) => ({ name, role, provider, model })) };
     const judges = crew.filter(a => a.role === "judge");
@@ -1316,7 +1316,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     say("RELAY", null, (job ? "Job from Claude: " + job.title + "!" : pb ? pb.label + " on the board!" : "New task on the board!") + " Everyone, places.");
     try {
       if (pb?.images) {
-        const urls = [...new Set(input.match(IMG_RE) || [])].slice(0, 4);
+        const urls = imgUrls = [...new Set(input.match(IMG_RE) || [])].slice(0, 4);
         if (!urls.length) throw new Error("Add at least one image link (PNG, JPG or WebP).");
         status.textContent = "LOADING " + urls.length + " IMAGE" + (urls.length > 1 ? "S" : "") + "…";
         images = await Promise.all(urls.map(loadImage));
@@ -1382,8 +1382,10 @@ Every recommendation must say why: the target search phrase and intent, the data
       }
       const draft = [...turns].reverse().find(t => t.role === "builder") || (crew.some(a => a.role === "builder") ? null : turns[turns.length - 1]);
       // never pass a judge's checklist off as the deliverable: with no draft there is nothing to send
+      // an image review nobody could run: the owner picks the image instead (the card goes to the top)
+      if (!draft && pb?.images && imgUrls.length) addSelfPick(job, imgUrls);
       if (!draft) throw new Error(crew.some(a => a.role === "builder")
-        ? "No draft: the writer failed every time. " + (skipped.length ? "Last error: " + skipped[skipped.length - 1].msg : "Check the log.")
+        ? "No draft: the writer failed every time. " + (skipped.length ? "Last error: " + skipped[skipped.length - 1].msg : "Check the log.") + (pb?.images && imgUrls.length ? " You can pick the image yourself: the card is at the top." : "")
         : "No teammate produced a reply. Check the log.");
       const done = Math.min(r, rounds);
       const verdictLine = approved ? "Approved by " + judges.filter(j => verdicts.get(j)).map(j => j.name).join(", ") + " in round " + done + "."
@@ -1547,6 +1549,17 @@ Every recommendation must say why: the target search phrase and intent, the data
     jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs(); buzz();
     return card;
   }
+  // when no model could review the images, the owner chooses; the pick goes to Claude in place of the team's review
+  function addSelfPick(job, urls){
+    const id = "pick-self-" + (job ? job.id : Date.now());
+    jobs = jobs.filter(x => x.id !== id);
+    const card = { id, type: "pick", self: true, job: job ? job.id : "", title: (job ? job.title : "Image review") + ": your call",
+      note: "The models are busy or out of free quota, so pick the best image yourself. Claude takes your pick in place of the team's review.",
+      multi: false, options: urls.map((u, k) => ({ id: String(k + 1), label: decodeURIComponent(u.split("?")[0].split("/").pop()), url: u })),
+      request: 0, chosen: [], at: Date.now(), status: "new", task: "" };
+    jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs(); buzz();
+    return card;
+  }
   function pickCard(j){
     const st = el("div", { className: "status" }), open = j.status === "new", sel = new Set(j.chosen || []);
     const send = el("button", { type: "button", className: "tiny", textContent: j.multi ? "SEND CHOICES" : "SEND CHOICE", disabled: !sel.size });
@@ -1569,12 +1582,15 @@ Every recommendation must say why: the target search phrase and intent, the data
       if (!inboxReady()) { st.className = "status err"; st.textContent = "Connect the Claude inbox under ⚙ first."; return; }
       const choices = j.options.filter(o => sel.has(o.id));
       send.disabled = true; st.className = "status"; st.textContent = "SENDING…";
-      const body = PICKED_MARK + " " + JSON.stringify({ request: j.request, choices: choices.map(o => o.id) }) + " -->\n**Picked:** " +
-        choices.map(o => o.id + (o.label ? " (" + o.label + ")" : "")).join(", ") + " for " + j.title;
+      const meta = j.self ? { job: j.job, choices: choices.map(o => o.id), urls: choices.map(o => o.url) } : { request: j.request, choices: choices.map(o => o.id) };
+      const body = PICKED_MARK + " " + JSON.stringify(meta) + " -->\n**Picked:** " +
+        choices.map(o => o.id + (o.label ? " (" + o.label + ")" : "")).join(", ") + " for " + j.title + (j.self ? " (the models were unavailable, so the owner chose)" : "");
       try {
         const c = await ghFetch(gh("/issues/" + inbox.pr + "/comments"), { method: "POST", body: JSON.stringify({ body }) });
         inbox.seen.push(c.id); saveInbox();
-        j.status = "chosen"; j.chosen = choices.map(o => o.id); j.noticed = true; saveJobs();
+        j.status = "chosen"; j.chosen = choices.map(o => o.id); j.noticed = true;
+        const src = j.self && jobs.find(x => x.id === j.job && !x.type); if (src) src.status = "sent";
+        saveJobs();
         say("RELAY", null, "Sent your pick to Claude: " + j.chosen.join(", ") + ".");
       } catch (e) { send.disabled = false; st.className = "status err"; st.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message; }
     };
@@ -1618,7 +1634,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     if (j.type === "pick") {
       const go = el("button", { type: "button", className: "tiny", textContent: j.multi ? "CHOOSE IMAGES" : "CHOOSE IMAGE" });
       go.onclick = () => { j.noticed = true; saveJobs(); const c = document.getElementById("card-" + j.id); if (!c) return; c.classList.add("flash"); c.scrollIntoView({ block: "start", behavior: "smooth" }); };
-      box.append(el("b", { textContent: "★ IMAGES READY TO PICK" }), el("div", { className: "small", textContent: j.title + " · " + j.options.length + " options" }), el("div", { className: "row" }, go, dismiss));
+      box.append(el("b", { textContent: j.self ? "★ MODELS BUSY: YOUR CALL" : "★ IMAGES READY TO PICK" }), el("div", { className: "small", textContent: j.title + " · " + j.options.length + " options" }), el("div", { className: "row" }, go, dismiss));
     } else {
       box.append(el("b", { textContent: "★ LIVE NOW" }), el("div", { className: "small", textContent: j.title }), el("div", { className: "link", textContent: j.url }),
         el("div", { className: "row" }, ...linkButtons(j.url), dismiss));
