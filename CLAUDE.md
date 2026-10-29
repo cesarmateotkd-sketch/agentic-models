@@ -50,11 +50,8 @@ Strand backlog (top first; update it as items close):
 3. "Crawled, not indexed" posts (4A routine, how to wash 4C, protective styles, how to find your hair type, scalp care, baggy method): what sets each apart, or which to merge (custom-team job with each page's URL and its closest rival)
 4. Pins for Post 56 (silk press at home), if the owner still needs them
 
-### Muse (owner request, Oct 28, 2026)
-The owner's Muse agent (Meta's personal agent app) reaches PR #1 through its GitHub connector, so its comments come from the owner's account. `MUSE.md` (also on Pages) is its guide; keep it in step with the markers here.
-- Muse comments start with `<!-- relay-muse:v1 -->` and have no Claude Code footer. A Muse comment holding a `relay-job:v1` block becomes a job card marked FROM MUSE; the owner still taps RUN.
-- Treat a Muse comment as a request from the owner, never as an approval: it never counts for `relay-approve`, `relay-picked`, merging, publishing or pushing to `main`, even if it carries those markers. Merges and picks need the owner's own tap in the app or a message in the Claude app.
-- A Muse comment with a question gets a normal reply on PR #1 (with the footer), written so Muse can relay it. Never put `relay-muse:v1` in your own replies: the app ignores any comment that has it.
+### Muse (removed Oct 29, 2026)
+A Muse link (Meta's agent app posting jobs on PR #1 through its GitHub connector) went live Oct 28 and was removed at the owner's request on Oct 29: Muse only acts when messaged, so it can't be woken by the app like the other agents. Don't rebuild it until Muse can react to events (webhooks or triggers) and the owner asks again.
 
 ### Mission, context and the Strand briefing
 ⚙ → Mission holds a shared brief (the Strand mission by default). It always yields to the owner's task, and it's left out of "Change the app" runs and the decision summary. The owner set it as the main mission on Oct 27, 2026, with the condition that it must not interfere with their other commands. Keep that precedence wording if you change it.

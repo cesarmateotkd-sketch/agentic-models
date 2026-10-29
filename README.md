@@ -123,6 +123,3 @@ Keys and the GitHub token are saved in the browser on your phone, and they survi
 - `AgentOffice.html`: the whole app
 - `index.html`: redirects the site root to the app
 - `manifest.json`, `icons/`: home-screen install
-
-## Muse (Meta's agent app)
-The owner's Muse agent can send jobs to the team and report results from WhatsApp or the Muse app. In Muse, connect GitHub (Connectors), give it access to this repo, and tell it: "Read https://cesarmateotkd-sketch.github.io/agentic-models/MUSE.md and follow it for my AI Relay Office." Jobs from Muse show up as cards marked FROM MUSE; nothing runs, merges or gets published without your tap.
