@@ -326,7 +326,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-29.1";
+  const APP_VERSION = "2026-10-30.1";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -344,7 +344,7 @@ fieldset:disabled .lock{display:block}
   /* ================= providers ================= */
   const PROVIDERS = {
     openrouter: { name: "OpenRouter", base: "https://openrouter.ai/api/v1", kind: "openai", keyUrl: "https://openrouter.ai/settings/keys",
-      note: "Biggest free lineup, including Nemotron 3 Ultra and Inkling. About 50 free requests a day, so give it first-round-only teammates.", def: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+      note: "Biggest free lineup, including Nemotron 3 Ultra and Gemma 4. About 50 free requests a day, so give it first-round-only teammates.", def: "nvidia/nemotron-3-ultra-550b-a55b:free" },
     groq: { name: "Groq", base: "https://api.groq.com/openai/v1", kind: "openai", keyUrl: "https://console.groq.com/keys",
       note: "Fastest provider. OpenAI's open GPT-OSS 120B with generous free daily limits.", def: "openai/gpt-oss-120b" },
     gemini: { name: "Google Gemini", base: "https://generativelanguage.googleapis.com/v1beta", kind: "gemini", keyUrl: "https://aistudio.google.com/apikey",
@@ -450,7 +450,7 @@ fieldset:disabled .lock{display:block}
       prompt: "Be a strict reviewer. Check the latest draft against every requirement in the task and plan. If it is genuinely ready, reply with APPROVED on the first line. Otherwise list specific, actionable problems, most important first." },
     { label: "Mira · Second opinion (Mistral Medium 3.5)", name: "Mira", title: "Second opinion", role: "judge", provider: "mistral", model: "mistral-medium-latest", every: true, hair: 2,
       prompt: "Review the latest draft from the target audience's point of view: is it clear, persuasive and on-brand? If it is genuinely ready, reply with APPROVED on the first line. Otherwise list what would make it land better." },
-    { label: "Inky · Idea generator (Inkling)", name: "Inky", title: "Ideas", role: "helper", provider: "openrouter", model: "thinkingmachines/inkling:free", every: false, hair: 4,
+    { label: "Inky · Idea generator (Gemma 4 31B)", name: "Inky", title: "Ideas", role: "helper", provider: "openrouter", model: "google/gemma-4-31b-it:free", every: false, hair: 4,
       prompt: "Before anyone writes, brainstorm 5 genuinely different angles or approaches for this task, one line each. Flag the strongest." },
     { label: "Doc · Fact checker (Gemini 2.5 Pro)", name: "Doc", title: "Fact checker", role: "helper", provider: "gemini", model: "gemini-2.5-pro", every: true, hair: 5,
       prompt: "Point out any claims in the latest draft that are likely wrong, outdated or unsupported, and say what to change. If there are none, say so in one line." },
@@ -467,6 +467,9 @@ fieldset:disabled .lock{display:block}
   const DEFAULT_TEAM = () => [0, 1, 2].map(i => Object.assign(fromPreset(PRESETS[i], 0), { hair: PRESETS[i].hair }));
   let team = store.get("team4", null) || DEFAULT_TEAM();
   // delegation is off for OpenRouter teammates by default: its free models allow only about 50 requests a day
+  // models a provider has withdrawn from normal use move to their replacement, so saved teammates keep working
+  const RETIRED = { "thinkingmachines/inkling:free": "google/gemma-4-31b-it:free" }; // Oct 2026: Inkling now only runs inside coding agents
+  if (team.some(a => RETIRED[a.model])) { team.forEach(a => { if (RETIRED[a.model]) a.model = RETIRED[a.model]; }); store.set("team4", team); }
   team.forEach((a, i) => { if (a.hair == null) a.hair = i % HAIRS.length; if (!a.title) a.title = a.role; if (a.delegate == null) a.delegate = a.provider !== "openrouter"; });
   // interns are off unless switched on: three parallel calls easily hit Groq's free per-minute token limit
   const internCfg = Object.assign({ enabled: false, provider: "groq", model: "openai/gpt-oss-120b", budget: 30 }, store.get("interns", {}));
