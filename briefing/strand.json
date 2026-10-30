@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-28",
+  "updated": "2026-10-30",
   "priorities": [
     "ROI first: the goal is affiliate income. The homepage quiz drives most Amazon clicks, so send readers into the quiz, ideally at their type (https://hairtypequiz.hair/?type=4C).",
     "Pinterest is the biggest channel after direct visits: 1-3 pins a day, each linking to a post or the quiz.",
@@ -8,7 +8,7 @@
   ],
   "data": [
     "Jul 29-Oct 27, 2026 (GA4): quiz homepage 490 sessions and 67 of 92 Amazon clicks (73%); all blog posts together 25 clicks. Sessions: direct 386, social (mostly Pinterest) 312, Google 209, AI assistants 88.",
-    "Near page 1 (Search Console, Jul 29-Oct 26): \"does 4c hair grow slower\" position 10.6, 48 impressions; \"how often should i do a protein treatment on 4c hair\" position 8.7, 19 impressions; sulfate-free shampoo questions positions 9.5-11; \"3b vs 3c\" 11.6 (title rewritten Oct 28).",
+    "Near page 1 (Search Console, Jul 29-Oct 26): \"does 4c hair grow slower\" position 10.6, 45 impressions (Jul 31-Oct 28; page corrected Oct 30, awaiting merge); \"how often should i do a protein treatment on 4c hair\" position 8.7, 19 impressions; sulfate-free shampoo questions positions 9.5-11; \"3b vs 3c\" 11.6 (title rewritten Oct 28).",
     "Latest post: best curl creams for 4C hair (Oct 27), https://hairtypequiz.hair/blog/best-curl-creams-4c-hair.html"
   ],
   "facts": [
@@ -20,6 +20,7 @@
     "Aunt Jackie's Curl La La contains no flaxseed (the brand's Don't Shrink gel does)."
   ],
   "avoid": [
+    "Saying 4C hair grows at the same rate as other hair or \"half an inch a month\": in studies it grew slower, about 0.3 in a month (see facts). Strand pages said this until Oct 30.",
     "Star ratings, review counts, Amazon prices or \"Amazon's #1 / bestseller\" claims (removed site-wide Oct 28).",
     "Saying Strand tested products; it doesn't.",
     "Invented numbers, studies, PMIDs or percentages (e.g. shrinkage percentages).",
@@ -32,12 +33,28 @@
     "Pins: 1000x1500, keyword in the first 40 characters of the title, straight apostrophes, footer hairtypequiz.hair."
   ],
   "playbooks": {
-    "pins": ["Every pin links to a post or the quiz; quiz pins by hair type earn the most clicks.", "Titles up to 100 characters, keyword first; descriptions up to 500, no hashtag stuffing."],
-    "outline": ["Lead the title with the exact search phrase; meta 140-155 characters; answer the question in the first two sentences.", "Plan a quiz link and 2-3 internal links."],
-    "factcheck": ["Check every number against Verified facts; anything else is unverified, with a PubMed search phrase to settle it."],
-    "compliance": ["FTC: disclosure before the first affiliate link. Amazon: the required statement is in every footer; no prices or ratings."],
-    "visual": ["The owner prefers Canva photographic pins: real natural hair, no before/after, warm light."],
-    "critique": ["Check the footer is spelled hairtypequiz.hair, look for AI flaws in hands and hair, and check headline readability at phone size."],
-    "custom": ["Strand is hairtypequiz.hair: a free hair type quiz (1A-4C) plus an evidence-led blog, paid by Amazon affiliate clicks."]
+    "pins": [
+      "Every pin links to a post or the quiz; quiz pins by hair type earn the most clicks.",
+      "Titles up to 100 characters, keyword first; descriptions up to 500, no hashtag stuffing."
+    ],
+    "outline": [
+      "Lead the title with the exact search phrase; meta 140-155 characters; answer the question in the first two sentences.",
+      "Plan a quiz link and 2-3 internal links."
+    ],
+    "factcheck": [
+      "Check every number against Verified facts; anything else is unverified, with a PubMed search phrase to settle it."
+    ],
+    "compliance": [
+      "FTC: disclosure before the first affiliate link. Amazon: the required statement is in every footer; no prices or ratings."
+    ],
+    "visual": [
+      "The owner prefers Canva photographic pins: real natural hair, no before/after, warm light."
+    ],
+    "critique": [
+      "Check the footer is spelled hairtypequiz.hair, look for AI flaws in hands and hair, and check headline readability at phone size."
+    ],
+    "custom": [
+      "Strand is hairtypequiz.hair: a free hair type quiz (1A-4C) plus an evidence-led blog, paid by Amazon affiliate clicks."
+    ]
   }
 }
