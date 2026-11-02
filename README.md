@@ -123,3 +123,7 @@ Keys and the GitHub token are saved in the browser on your phone, and they survi
 - `AgentOffice.html`: the whole app
 - `index.html`: redirects the site root to the app
 - `manifest.json`, `icons/`: home-screen install
+
+## Backup and redo
+- **⚙ → Backup:** SAVE BACKUP downloads a file with everything the app keeps on the phone (keys, team, jobs, history); RESTORE loads it back after Safari's data is cleared or on a new phone. The file contains your keys, so keep it private.
+- **REDO WITH NOTE:** under a finished run, type what to change in the note and tap REDO WITH NOTE to run the team again with it. SEND TO CLAUDE still sends the note to Claude.

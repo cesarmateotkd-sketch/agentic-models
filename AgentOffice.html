@@ -308,6 +308,16 @@ fieldset:disabled .lock{display:block}
     <div id="track"><div class="empty">Every turn gets written down here.</div></div>
   </section>
 
+  <details class="win" id="backupPanel">
+    <summary>Backup</summary>
+    <div class="stack">
+      <div class="small">Your keys, team, jobs and history live only in this phone's browser. If Safari's website data is cleared, they're gone. Save a backup file now and then; restore it here after a reset or on a new phone. The file holds your API keys and GitHub token, so keep it private (Files app or iCloud, never a public link).</div>
+      <div class="row"><button type="button" id="backupSave">SAVE BACKUP</button><button type="button" id="backupLoad">RESTORE</button></div>
+      <input type="file" id="backupFile" accept=".json,application/json" hidden>
+      <div class="status" id="backupStatus"></div>
+    </div>
+  </details>
+
   <details class="win" id="historyWin">
     <summary>History <span class="hint" id="histCount"></span></summary>
     <div class="stack" id="history"></div>
@@ -326,7 +336,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-10-30.1";
+  const APP_VERSION = "2026-11-02.1";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -1300,9 +1310,13 @@ fieldset:disabled .lock{display:block}
   const restLabel = a => { const h = health[hkey(a)]; return h ? h.why + ", back " + new Date(h.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
   // backups for one teammate: models that can see images for an image reviewer; otherwise other free models on
   // the same provider (when its list is loaded), then each connected provider's default
+  const GOOD_FREE = ["google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-super-vl:free", "google/gemma-4-26b-a4b-it:free", "nvidia/nemotron-3-ultra-550b-a55b:free"]; // checked Oct 30, 2026
   function backupsFor(a){
     if (a.vision) return VISION_BACKUPS.slice();
-    const same = a.provider === "openrouter" && modelLists.openrouter ? modelLists.openrouter.filter(m => /:free$/.test(m) && m !== a.model).slice(0, 2).map(m => ({ provider: "openrouter", model: m })) : [];
+    const free = a.provider === "openrouter" && modelLists.openrouter ? modelLists.openrouter.filter(m => /:free$/.test(m) && m !== a.model) : [];
+    // known-good general models first: the rest of the list is newest-first and often tiny or coding-only models
+    free.sort((x, y) => (GOOD_FREE.indexOf(x) + 1 || 99) - (GOOD_FREE.indexOf(y) + 1 || 99));
+    const same = free.slice(0, 2).map(m => ({ provider: "openrouter", model: m }));
     return same.concat(["groq", "gemini", "mistral", "openrouter"].map(p => ({ provider: p, model: PROVIDERS[p].def })));
   }
   const pickBackup = (a, tried) => backupsFor(a).find(o => o.model && !tried.includes(o.provider + "/" + o.model) && hasKey(o.provider) && !resting(o));
@@ -1708,7 +1722,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     const rounds = pb ? pb.rounds : +$("rounds").value;
     let images = null, imgUrls = [];
     const run = { id: Date.now().toString(36), at: Date.now(), title: (job ? job.title : input.split("\n")[0]).slice(0, 90), playbook: pbKey, jobId: job?.id || null,
-      task, status: "running", turns: [], crew: crew.map(({ name, role, provider, model }) => ({ name, role, provider, model })) };
+      task, input, status: "running", turns: [], crew: crew.map(({ name, role, provider, model }) => ({ name, role, provider, model })) };
     const judges = crew.filter(a => a.role === "judge");
     // verdicts only count for the current draft: a new builder draft clears them
     const verdicts = new Map();
@@ -1877,7 +1891,8 @@ Every recommendation must say why: the target search phrase and intent, the data
     fin.art.appendChild(btn);
     const job = run.jobId ? jobs.find(j => j.id === run.jobId) : null;
     fin.art.appendChild(handoffControls({ task: run.task, draft: run.final, crew: run.crew, verdictLine: run.verdictLine, lastJudge: run.lastJudge,
-      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent, skipped: run.skipped, why: run.why }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
+      playbook: PLAYBOOKS[run.playbook]?.label, job, sentAlready: run.sent, skipped: run.skipped, why: run.why,
+      redo: run.input ? { input: run.input, playbook: run.playbook, job } : null }, onSent ? () => { run.sent = true; saveRun(run); onSent(); } : () => { run.sent = true; saveRun(run); }, !!onSent));
     return fin;
   }
   // the last 20 runs, each step saved as it happens, so a locked phone or a closed app doesn't lose the work
@@ -2266,7 +2281,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     if (job && inboxReady()) setTimeout(() => btn.onclick(), 0);
   }
   function handoffControls(ctx, onSent, auto){
-    const note = el("textarea", { placeholder: "Note for Claude (optional), e.g. “Use this as the intro for Post 57”" });
+    const note = el("textarea", { placeholder: "Note (optional). SEND TO CLAUDE takes it to Claude; REDO WITH NOTE runs the team again with it, e.g. “make them anime-themed”" });
     note.setAttribute("aria-label", "Note for Claude");
     const send = el("button", { type: "button", className: "tiny", textContent: "SEND TO CLAUDE" });
     const st = el("div", { className: "status" });
@@ -2284,9 +2299,23 @@ Every recommendation must say why: the target search phrase and intent, the data
         send.disabled = false; st.className = "status err"; st.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message;
       }
     };
+    // the team never sees this note (it's written after the run), so offer to run the team again with it
+    const redo = el("button", { type: "button", className: "tiny", textContent: "REDO WITH NOTE" });
+    redo.hidden = !ctx.redo;
+    note.addEventListener("input", () => { if (st.classList.contains("err")) { st.className = "status"; st.textContent = ""; } });
+    redo.onclick = () => {
+      const extra = note.value.trim();
+      if (!extra) { st.className = "status err"; st.textContent = "Type what to change in the note first, then tap REDO WITH NOTE."; note.focus(); return; }
+      if (controller) { st.className = "status err"; st.textContent = "The team is busy. Wait for this run to finish."; return; }
+      $("playbook").value = ctx.redo.playbook || ""; onPlaybook();
+      $("task").value = ctx.redo.input + "\n\nOWNER'S NOTE (follow this): " + extra; store.set("task", $("task").value);
+      pendingJob = ctx.redo.job || null;
+      $("taskForm").requestSubmit ? $("taskForm").requestSubmit() : $("run").click();
+      $("office").scrollIntoView({ block: "start" });
+    };
     if (ctx.sentAlready) { send.textContent = "SENT"; send.disabled = true; note.disabled = true; }
     else if (auto && inboxReady()) setTimeout(() => send.onclick(), 0);
-    return el("div", { className: "handoff" }, note, send, st);
+    return el("div", { className: "handoff" }, note, el("div", { className: "row" }, send, redo), st);
   }
 
   let polling = false;
@@ -2340,6 +2369,28 @@ Every recommendation must say why: the target search phrase and intent, the data
     scene.claudeVisit();
     say("Claude", "claude", clean + (shots.length ? "\n\n[" + shots.length + " screenshot" + (shots.length > 1 ? "s" : "") + " in the log below. Tap one to open it full size.]" : ""));
   }
+  /* ----- backup: every relay2.* key, raw, so a restore puts back exactly what was saved ----- */
+  $("backupSave").onclick = () => {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith("relay2.")) data[k] = localStorage.getItem(k); }
+    const file = new Blob([JSON.stringify({ app: "ai-relay-office", version: APP_VERSION, at: new Date().toISOString(), data }, null, 1)], { type: "application/json" });
+    const a = el("a", { href: URL.createObjectURL(file), download: "relay-backup-" + new Date().toISOString().slice(0, 10) + ".json" });
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    $("backupStatus").className = "status ok"; $("backupStatus").textContent = "SAVED " + Object.keys(data).length + " ITEMS. KEEP THE FILE PRIVATE.";
+  };
+  $("backupLoad").onclick = () => $("backupFile").click();
+  $("backupFile").onchange = async () => {
+    const st = $("backupStatus"), f = $("backupFile").files[0]; $("backupFile").value = "";
+    if (!f) return;
+    let j = null; try { j = JSON.parse(await f.text()); } catch {}
+    const keys = j && j.app === "ai-relay-office" && j.data && typeof j.data === "object" ? Object.keys(j.data).filter(k => k.startsWith("relay2.") && typeof j.data[k] === "string") : [];
+    if (!keys.length) { st.className = "status err"; st.textContent = "That isn't a Relay backup file."; return; }
+    if (!confirm("Restore " + keys.length + " saved items from " + (j.at || "?").slice(0, 10) + "? This replaces what's on this phone now.")) return;
+    try { keys.forEach(k => localStorage.setItem(k, j.data[k])); } catch { st.className = "status err"; st.textContent = "Couldn't write to this browser's storage."; return; }
+    st.className = "status ok"; st.textContent = "RESTORED. RELOADING…";
+    setTimeout(() => location.reload(), 600);
+  };
+
   setInterval(pollInbox, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollInbox(); checkUpdate(); } });
 
