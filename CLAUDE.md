@@ -85,7 +85,7 @@ The owner wants to know why a decision was made, above all for articles posted o
 
 ### Reliability (owner request, Oct 28, 2026)
 - A model that fails with a rate limit, quota, refused key or missing model "rests": daily quotas until midnight UTC, others for a few minutes. Resting models are skipped up front; ⚙ → Connections lists them with a RESET button.
-- Every teammate (any role, playbooks and the custom team) falls back to up to 2 backups: other free OpenRouter models when the list is loaded, then each connected provider's default. Image reviewers only use models that can see images.
+- Every teammate (any role, playbooks and the custom team) falls back to up to 2 backups: other free OpenRouter models when the list is loaded, then each connected provider's default. Image reviewers only use models that can see images. OpenRouter's free limits (`free-models-per-min`, `free-models-per-day`) are per account, so hitting one rests every `:free` model at once (`health` key `openrouter/*:free`) and backups go to other providers. Judges check that numbers, product facts and links come from the task (or are marked unverified) and that the owner's notes are followed, without inventing format rules.
 - When no model can write a draft, the app hands the task to Claude: automatically for a job from Claude, otherwise with ASK CLAUDE INSTEAD. That handoff's outcome says "The team couldn't produce a draft". Do the task directly and reply with the result.
 
 ### Merge approvals from the app

@@ -343,7 +343,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-04.1";
+  const APP_VERSION = "2026-11-04.2";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -355,7 +355,7 @@ fieldset:disabled .lock{display:block}
   $("gear").onclick = () => {
     const show = $("settings").hidden;
     $("settings").hidden = !show; $("gear").setAttribute("aria-expanded", String(show));
-    if (show) $("settings").scrollIntoView({ block: "start" });
+    if (show) { renderConns(); $("settings").scrollIntoView({ block: "start" }); } // resting models change during runs
   };
 
   /* ================= providers ================= */
@@ -412,7 +412,7 @@ fieldset:disabled .lock{display:block}
     if (keys.length) {
       const reset = el("button", { type: "button", className: "tiny", textContent: "RESET" });
       reset.onclick = () => { keys.forEach(k => delete health[k]); saveHealth(); renderConns(); };
-      box.appendChild(el("div", { className: "rest" }, el("span", { textContent: "Resting: " + keys.map(k => k.split("/").slice(1).join("/") + " (" + health[k].why + " until " + new Date(health[k].until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ")").join(", ") }), reset));
+      box.appendChild(el("div", { className: "rest" }, el("span", { textContent: "Resting: " + keys.map(k => (k === "openrouter/*:free" ? "all free OpenRouter models" : k.split("/").slice(1).join("/")) + " (" + health[k].why + " until " + new Date(health[k].until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ")").join(", ") }), reset));
     }
     for (const pid in PROVIDERS) {
       const P = PROVIDERS[pid], c = conn[pid];
@@ -471,7 +471,7 @@ fieldset:disabled .lock{display:block}
       prompt: "Before anyone writes, brainstorm 5 genuinely different angles or approaches for this task, one line each. Flag the strongest." },
     { label: "Doc · Fact checker (Gemini 2.5 Pro)", name: "Doc", title: "Fact checker", role: "helper", provider: "gemini", model: "gemini-2.5-pro", every: true, hair: 5,
       prompt: "Point out any claims in the latest draft that are likely wrong, outdated or unsupported, and say what to change. If there are none, say so in one line." },
-    { label: "Byte · Coder (Laguna S 2.1)", name: "Byte", title: "Coder", role: "builder", provider: "openrouter", model: "poolside/laguna-s-2.1:free", every: true, hair: 6,
+    { label: "Byte · Coder (Gemini 2.5 Flash)", name: "Byte", title: "Coder", role: "builder", provider: "gemini", model: "gemini-2.5-flash", every: true, hair: 6,
       prompt: "Write complete, working code for the task. When there is feedback, return the full revised code." },
     { label: "New hire (blank)", name: "", title: "Helper", role: "helper", provider: "", model: "", every: true, hair: 7, prompt: ROLE_PROMPTS.helper }
   ];
@@ -485,9 +485,14 @@ fieldset:disabled .lock{display:block}
   let team = store.get("team4", null) || DEFAULT_TEAM();
   // delegation is off for OpenRouter teammates by default: its free models allow only about 50 requests a day
   // models a provider has withdrawn from normal use move to their replacement, so saved teammates keep working
-  const RETIRED = { "thinkingmachines/inkling:free": "google/gemma-4-31b-it:free" }; // Oct 2026: Inkling now only runs inside coding agents
+  const RETIRED = { "thinkingmachines/inkling:free": "google/gemma-4-31b-it:free", // Oct 2026: Inkling now only runs inside coding agents
+    "poolside/laguna-s-2.1:free": "google/gemma-4-31b-it:free" }; // Nov 2026: OpenRouter no longer serves Laguna S 2.1
   // one-time moves, remembered in "migrations" so a model the owner picks again later isn't changed back
   const migrations = store.get("migrations", []);
+  if (!migrations.includes("byte-laguna-gone")) { // a builder off OpenRouter's shared free pool when a Gemini key is saved
+    team.forEach(a => { if (a.model === "poolside/laguna-s-2.1:free") Object.assign(a, conn.gemini?.key ? { provider: "gemini", model: "gemini-2.5-flash", delegate: true } : { model: "google/gemma-4-31b-it:free" }); });
+    migrations.push("byte-laguna-gone"); store.set("migrations", migrations); store.set("team4", team);
+  }
   if (!migrations.includes("nova-nemotron35")) { // Nov 2026: Nemotron 3 Ultra kept returning empty replies
     team.forEach(a => { if (a.model === "nvidia/nemotron-3-ultra-550b-a55b:free") a.model = "nvidia/nemotron-3.5-super-vl:free"; });
     migrations.push("nova-nemotron35"); store.set("migrations", migrations); store.set("team4", team);
@@ -1308,7 +1313,10 @@ fieldset:disabled .lock{display:block}
   const health = store.get("health", {});
   const saveHealth = () => { const now = Date.now(); for (const k in health) if (health[k].until <= now) delete health[k]; store.set("health", health); };
   const hkey = a => a.provider + "/" + a.model;
-  const resting = a => (health[hkey(a)]?.until || 0) > Date.now();
+  // OpenRouter's free limits (per minute and per day) cover the whole account, so when one free model hits them, every free model rests
+  const POOL = "openrouter/*:free";
+  const inPool = a => a.provider === "openrouter" && /:free$/.test(a.model || "");
+  const resting = a => Math.max(health[hkey(a)]?.until || 0, inPool(a) ? health[POOL]?.until || 0 : 0) > Date.now();
   function markSick(a, err){
     if (!err || err.name === "AbortError" || isNetErr(err)) return;
     const m = String(err.message), now = Date.now();
@@ -1318,9 +1326,9 @@ fieldset:disabled .lock{display:block}
     else if (err.status === 401 || err.status === 403) { until = now + 30 * 60000; why = "key refused"; }
     else if (err.status === 400 || err.status === 404) { until = now + 30 * 60000; why = "model unavailable"; }
     else if (err.timedOut) { until = now + 5 * 60000; why = "too slow"; }
-    if (until) { health[hkey(a)] = { until, why }; saveHealth(); }
+    if (until) { health[hkey(a)] = { until, why }; if (inPool(a) && /free-models-per-(day|min)/i.test(m)) health[POOL] = { until, why }; saveHealth(); }
   }
-  const restLabel = a => { const h = health[hkey(a)]; return h ? h.why + ", back " + new Date(h.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
+  const restLabel = a => { const h = (health[hkey(a)]?.until || 0) > Date.now() ? health[hkey(a)] : health[POOL]; return h ? h.why + ", back " + new Date(h.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
   // backups for one teammate: models that can see images for an image reviewer; otherwise other free models on
   // the same provider (when its list is loaded), then each connected provider's default
   const GOOD_FREE = ["nvidia/nemotron-3.5-super-vl:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]; // checked Nov 2, 2026
@@ -1445,7 +1453,7 @@ fieldset:disabled .lock{display:block}
     const recent = lastDraftIdx < 0 ? turns.filter(t => !early.includes(t)) : turns.slice(lastDraftIdx);
     const ctx = [...early, ...recent].map(t => "### " + t.name + " (" + t.role + ", round " + t.round + ")\n" + clip(t.text)).join("\n\n");
     const ask = a.role === "builder" ? (lastDraftIdx < 0 ? "Write the deliverable now." : "Revise the latest draft using the feedback above and return the full deliverable.")
-      : a.role === "judge" ? (lastDraftIdx < 0 ? "There is no draft yet. Say what the builder must get right." : "Judge the latest draft. First line APPROVED if it is ready; otherwise list the problems.")
+      : a.role === "judge" ? (lastDraftIdx < 0 ? "There is no draft yet. Say what the builder must get right." : "Judge the latest draft. First line APPROVED if it is ready; otherwise list the problems. Check: (1) every number, statistic, study, product fact and link either comes from the TASK above or is clearly marked unverified; (2) everything the task and any owner's note ask for is done, including its topic and limits; (3) no internal links to pages the task didn't name. Don't fail the draft for formatting or details the task didn't ask for.")
       : "Add your input for round " + round + ".";
     return "TASK:\n" + task + (ctx ? "\n\nTEAM SO FAR:\n" + ctx : "") + "\n\nYOUR TURN (" + a.name + "): " + ask;
   }
