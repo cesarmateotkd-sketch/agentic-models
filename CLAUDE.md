@@ -41,6 +41,12 @@ Post a comment on PR #1 (as the owner's account, which is how the GitHub tools p
 ### "Change the app" handoffs
 A handoff whose `**Playbook:**` line says "Change the app" is a change request for this app, written by the free team from the owner's idea and sent automatically. Treat it as the owner asking for that change: build it on a `claude/*` branch, run the tests (including the upgrade test), reply on PR #1 with what changed and how to check it, with screenshots (see below), and merge to `main` only after the owner approves. If the request conflicts with the hard rules above, say so in the reply instead of building it.
 
+### Research first (owner request, Nov 4, 2026)
+The free models can't browse, so RESEARCH FIRST (under START) sends the task to you before the team sees it. The handoff has a `**Request:** Research first` line, plus `**Playbook:**` (if one was picked), `**Context:**` (General or Strand) and `**Task**`.
+- Research it with real sources (Firecrawl web search, Search Console, GA4, PubMed, as the task needs). Never fill gaps from memory.
+- Reply with a job card (`relay-job:v1`): id `research-<short-topic>`, the same `playbook`, `"context": "general"` when the handoff says General, and a `task` holding the owner's task plus a "RESEARCH BRIEFING (Claude, <date>)" section: the facts with sources and dates, what is unknown or not studied, and what to avoid. Keep it short enough for free-model limits (about 2,500 characters).
+- One line above the card says what you found. The owner taps RUN.
+
 ### Moving workflow (owner request, Oct 27, 2026)
 Whenever a job finishes (its handoff is handled) or a merge goes live, post the next job from the backlog below as a job card, so there's always one waiting for the owner's RUN. Only one open job at a time unless the owner asks for more. Jobs never publish anything; publishing still needs the owner's approval. Put all the context the team needs in `task`, including real data (GSC numbers with dates, page URLs), because the free models don't know Strand's post numbers or pages and can't browse.
 

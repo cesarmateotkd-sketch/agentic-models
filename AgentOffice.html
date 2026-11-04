@@ -213,6 +213,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0}
 fieldset:disabled .agent{opacity:.6}
 .lock{display:none;font:9px/1.5 var(--px);color:var(--err)}
 fieldset:disabled .lock{display:block}
+  .research-row{align-items:center;gap:10px;margin-top:6px}
+  .research-row button{flex:0 0 auto}
+  .research-row .small{flex:1}
 </style>
 </head>
 <body>
@@ -259,6 +262,10 @@ fieldset:disabled .lock{display:block}
           <div><button type="button" class="round-btn b" id="stop" disabled aria-label="Stop">B</button><div class="btn-label">STOP</div></div>
           <div><button type="submit" class="round-btn" id="run" aria-label="Start">A</button><div class="btn-label">START</div></div>
         </div>
+      </div>
+      <div class="row research-row">
+        <button type="button" id="researchFirst">RESEARCH FIRST</button>
+        <div class="small">Claude researches the task with real sources first, then sends it back as a job card for the team.</div>
       </div>
       <div class="status" id="status"></div>
     </div>
@@ -336,7 +343,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-02.2";
+  const APP_VERSION = "2026-11-04.1";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -1697,7 +1704,7 @@ Every recommendation must say why: the target search phrase and intent, the data
 
   let controller = null;
   // the Team editor is locked during a run: NPCs are bound to team slots, so edits mid-run would desync them
-  function setRunning(on){ $("run").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("playbook").disabled = on; $("teamFields").disabled = on; $("missionText").disabled = on; $("missionOn").disabled = on; $("led").classList.toggle("on", on); }
+  function setRunning(on){ $("run").disabled = on; $("researchFirst").disabled = on; $("stop").disabled = !on; $("task").disabled = on; $("rounds").disabled = on; $("playbook").disabled = on; $("teamFields").disabled = on; $("missionText").disabled = on; $("missionOn").disabled = on; $("led").classList.toggle("on", on); }
   const isApproval = text => /^\W*APPROVED\b/i.test(text.split("\n")[0]);
 
   $("task").value = store.get("task", "");
@@ -2395,6 +2402,30 @@ Every recommendation must say why: the target search phrase and intent, the data
     try { keys.forEach(k => localStorage.setItem(k, j.data[k])); } catch { st.className = "status err"; st.textContent = "Couldn't write to this browser's storage."; return; }
     st.className = "status ok"; st.textContent = "RESTORED. RELOADING…";
     setTimeout(() => location.reload(), 600);
+  };
+
+  /* ----- research first: the free models can't browse, so Claude researches the task and sends it back as a job card ----- */
+  $("researchFirst").onclick = async () => {
+    const status = $("status"), input = $("task").value.trim(), b = $("researchFirst");
+    if (!input) { status.className = "status err"; status.textContent = "Type the task first, then tap RESEARCH FIRST."; return; }
+    if (controller) { status.className = "status err"; status.textContent = "The team is busy. Wait for this run to finish."; return; }
+    if (!inboxReady()) { openSettings("connPanel"); status.className = "status err"; status.textContent = "Set up and TEST the Claude inbox under Connections first."; return; }
+    const pbKey = $("playbook").value, ctx = ctxFor(pbKey, null).mode;
+    const body = [INBOX_MARK, "### Relay Office handoff", "**Request:** Research first",
+      PLAYBOOKS[pbKey] ? "**Playbook:** " + PLAYBOOKS[pbKey].label : "", "**Context:** " + (ctx === "strand" ? "Strand" : "General"),
+      "**Task**\n" + quote(input),
+      "**Note for Claude**\n> Research this with real sources first, then send it back as a job card with your briefing in the task, so the team works from facts."
+    ].filter(Boolean).join("\n\n");
+    b.disabled = true; status.className = "status"; status.textContent = "SENDING TO CLAUDE…";
+    try {
+      const c = await ghFetch(gh("/issues/" + inbox.pr + "/comments"), { method: "POST", body: JSON.stringify({ body }) });
+      inbox.seen.push(c.id); saveInbox();
+      status.className = "status ok"; status.textContent = "CLAUDE IS RESEARCHING · A JOB CARD COMES BACK HERE";
+      logTurn("claude", "RESEARCH FIRST", "sent to Claude", "Task: " + input + "\n\nClaude researches it with real sources and sends it back as a job card. Tap RUN on that card when it arrives.");
+      say("RELAY", null, "Sent to Claude for research! A job card with the briefing comes back here.");
+      setTimeout(pollInbox, 15000);
+    } catch (e) { status.className = "status err"; status.textContent = isNetErr(e) ? "Couldn't reach GitHub. Try again." : e.message; }
+    finally { setTimeout(() => { b.disabled = false; }, 3000); }
   };
 
   setInterval(pollInbox, 20000);

@@ -127,3 +127,4 @@ Keys and the GitHub token are saved in the browser on your phone, and they survi
 ## Backup and redo
 - **⚙ → Backup:** SAVE BACKUP downloads a file with everything the app keeps on the phone (keys, team, jobs, history); RESTORE loads it back after Safari's data is cleared or on a new phone. The file contains your keys, so keep it private.
 - **REDO WITH NOTE:** under a finished run, type what to change in the note and tap REDO WITH NOTE to run the team again with it. SEND TO CLAUDE still sends the note to Claude.
+- **RESEARCH FIRST:** under START. Sends the task to Claude, who researches it with real sources and sends it back as a job card with a briefing built in. Tap RUN on that card and the team works from those facts. Use it when facts matter; START is still the quick way.
