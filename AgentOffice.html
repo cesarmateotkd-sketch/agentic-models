@@ -343,7 +343,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-04.2";
+  const APP_VERSION = "2026-11-05.1";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -1343,7 +1343,7 @@ fieldset:disabled .lock{display:block}
   const pickBackup = (a, tried) => backupsFor(a).find(o => o.model && !tried.includes(o.provider + "/" + o.model) && hasKey(o.provider) && !resting(o));
 
   /* ================= calling models ================= */
-  const CALL_TIMEOUT = 180000;
+  const CALL_TIMEOUT = 180000, TEXT_TIMEOUT = 90000;
   const stripThink = t => String(t).replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim();
   // AbortSignal.any() is too new for older iPhones, so link the run's signal to a per-call timeout by hand
   // iOS suspends a home-screen app seconds after it leaves the screen, which kills in-flight fetches.
@@ -1388,10 +1388,12 @@ fieldset:disabled .lock{display:block}
     const onAbort = () => ctl.abort();
     if (runSignal.aborted) ctl.abort(); else runSignal.addEventListener("abort", onAbort);
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, CALL_TIMEOUT);
+    // free models answer in well under a minute; a stuck one hands over to its backup instead of holding the run
+    const limit = images?.length ? CALL_TIMEOUT : TEXT_TIMEOUT;
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, limit);
     try { return await callAgentOnce(a, userMsg, ctl.signal, images); }
     catch (e) {
-      if (timedOut && !runSignal.aborted) throw Object.assign(new Error(a.name + " took longer than " + CALL_TIMEOUT / 60000 + " minutes to answer."), { timedOut: true });
+      if (timedOut && !runSignal.aborted) throw Object.assign(new Error(a.name + " took longer than " + Math.round(limit / 1000) + " seconds to answer."), { timedOut: true });
       throw e;
     } finally { clearTimeout(timer); runSignal.removeEventListener("abort", onAbort); }
   }
@@ -1957,11 +1959,14 @@ Every recommendation must say why: the target search phrase and intent, the data
   let jobs = store.get("jobs", []), pendingJob = null;
   const JOB_MARK = "<!-- relay-job:v1 -->";
   const saveJobs = () => { store.set("jobs", jobs); renderJobs(); };
+  // keep every card still waiting on the owner (new jobs, previews, picks, approvals not merged yet); trim only finished ones
+  const waiting = x => x.status === "new" || x.status === "approved";
+  const capJobs = list => { let done = 0; return list.filter(x => waiting(x) || ++done <= 30 - Math.min(20, list.filter(waiting).length)); };
   function addJob(j){
     if (!j || !j.id || !j.task || jobs.some(x => x.id === String(j.id))) return null;
     const job = { id: String(j.id).slice(0, 60), title: String(j.title || j.id).slice(0, 120), playbook: PLAYBOOKS[j.playbook] ? j.playbook : "", context: j.context === "general" ? "general" : "strand",
       task: String(j.task).slice(0, 8000), at: Date.now(), status: "new" };
-    jobs.unshift(job); jobs = jobs.slice(0, 30); saveJobs();
+    jobs.unshift(job); jobs = capJobs(jobs); saveJobs();
     return job;
   }
   function parseJob(body){ const m = /```json\s*([\s\S]*?)```/.exec(body); try { return m ? JSON.parse(m[1]) : null; } catch { return null; } }
@@ -1975,7 +1980,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     jobs = jobs.filter(x => !(x.type === "merge" && x.repo === m.repo && x.branch === m.branch && x.status === "new"));
     const card = { id: "merge-" + commentId, type: "merge", title: String(m.title || "Merge " + m.branch).slice(0, 120), repo: String(m.repo), branch: String(m.branch),
       sha: String(m.sha || ""), request: commentId, at: Date.now(), status: "new" };
-    jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs();
+    jobs.unshift(card); jobs = capJobs(jobs); saveJobs();
     return card;
   }
   // relay-merged may carry the live page's url; the card and the notice then offer COPY LINK
@@ -1986,7 +1991,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     jobs.forEach(x => { if (x.type === "merge" && x.branch === m.branch && (!m.repo || x.repo === m.repo)) { x.status = "live"; if (url) { x.url = url; x.noticed = false; } hit = x; } });
     if (!hit && url) {
       hit = { id: "live-" + Date.now(), type: "merge", title: String(m.title || "Now live").slice(0, 120), repo: String(m.repo || ""), branch: String(m.branch || ""), sha: "", request: 0, url, at: Date.now(), status: "live", task: "" };
-      jobs.unshift(hit); jobs = jobs.slice(0, 30);
+      jobs.unshift(hit); jobs = capJobs(jobs);
     }
     saveJobs();
     if (hit?.url) buzz();
@@ -2023,7 +2028,7 @@ Every recommendation must say why: the target search phrase and intent, the data
     if (!options.length) return null;
     const card = { id: "pick-" + commentId, type: "pick", title: String(m.title || "Pick an image").slice(0, 120), note: String(m.note || "").slice(0, 300),
       multi: !!m.multi, options, request: commentId, chosen: [], at: Date.now(), status: "new", task: "" };
-    jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs(); buzz();
+    jobs.unshift(card); jobs = capJobs(jobs); saveJobs(); buzz();
     return card;
   }
   // when no model could review the images, the owner chooses; the pick goes to Claude in place of the team's review
@@ -2034,7 +2039,7 @@ Every recommendation must say why: the target search phrase and intent, the data
       note: "The models are busy or out of free quota, so pick the best image yourself. Claude takes your pick in place of the team's review.",
       multi: false, options: urls.map((u, k) => ({ id: String(k + 1), label: decodeURIComponent(u.split("?")[0].split("/").pop()), url: u })),
       request: 0, chosen: [], at: Date.now(), status: "new", task: "" };
-    jobs.unshift(card); jobs = jobs.slice(0, 30); saveJobs(); buzz();
+    jobs.unshift(card); jobs = capJobs(jobs); saveJobs(); buzz();
     return card;
   }
   function pickCard(j){
@@ -2082,7 +2087,8 @@ Every recommendation must say why: the target search phrase and intent, the data
 
   /* ----- notice: one banner at a time for what's waiting on the owner ----- */
   /* ----- update check: an iPhone home-screen app can keep an old copy of the page; offer a one-tap reload ----- */
-  let updateTo = "", lastCheck = 0;
+  let updateTo = "", lastCheck = 0, inboxDown = "";
+  const daysLeft = () => { if (!inbox.expires) return 99; const t = new Date(); t.setHours(12, 0, 0, 0); return Math.round((new Date(inbox.expires + "T12:00:00") - t) / 864e5); };
   async function checkUpdate(){
     if (Date.now() - lastCheck < 120000 || controller) return;
     lastCheck = Date.now();
@@ -2099,6 +2105,16 @@ Every recommendation must say why: the target search phrase and intent, the data
       const go = el("button", { type: "button", className: "tiny", textContent: "UPDATE NOW" });
       go.onclick = () => location.replace(location.pathname + "?v=" + encodeURIComponent(updateTo));
       box.append(el("b", { textContent: "★ UPDATE READY" }), el("div", { className: "small", textContent: "A newer version of the app is live. Your keys and history stay." }), el("div", { className: "row" }, go));
+      return;
+    }
+    if (inboxReady() && (inboxDown || daysLeft() <= 7)) {
+      box.hidden = false;
+      const fix = el("button", { type: "button", className: "tiny", textContent: "FIX IT" });
+      fix.onclick = () => { openSettings("connPanel"); $("inbox-token")?.scrollIntoView({ block: "center" }); $("inbox-token")?.focus(); };
+      const d = daysLeft();
+      box.append(el("b", { textContent: inboxDown ? "★ CLAUDE INBOX DISCONNECTED" : d < 0 ? "★ GITHUB TOKEN EXPIRED" : "★ GITHUB TOKEN EXPIRES " + (d === 0 ? "TODAY" : "IN " + d + (d === 1 ? " DAY" : " DAYS")) }),
+        el("div", { className: "small", textContent: inboxDown ? "GitHub refused the token, so Claude's replies, new jobs and MERGE IT can't get through. Make a new token, paste it under Connections and tap TEST." : "Make a new token before then, paste it under Connections and tap TEST, so Claude's replies keep coming." }),
+        el("div", { className: "row" }, fix));
       return;
     }
     const j = jobs.find(x => !x.noticed && ((x.type === "pick" && x.status === "new") || (x.type === "merge" && x.status === "live" && x.url)));
@@ -2204,7 +2220,7 @@ Every recommendation must say why: the target search phrase and intent, the data
       const hint = r.status === 401 ? " The token is wrong or expired. Make a new one."
         : r.status === 403 || r.status === 404 ? " Check the repo and PR number, and that the token has Pull requests: Read and write on this repo."
         : r.status === 422 ? "" : "";
-      throw new Error("GitHub: " + ((j && j.message) || "HTTP " + r.status) + "." + hint);
+      throw Object.assign(new Error("GitHub: " + ((j && j.message) || "HTTP " + r.status) + "." + hint), { status: r.status });
     }
     return j;
   }
@@ -2226,6 +2242,8 @@ Every recommendation must say why: the target search phrase and intent, the data
     key.addEventListener("change", () => { inbox.token = key.value.trim(); reset(); });
     const show = el("button", { type: "button", className: "tiny", textContent: "SHOW" });
     show.onclick = () => { const h = key.type === "text"; key.type = h ? "password" : "text"; show.textContent = h ? "SHOW" : "HIDE"; };
+    const expires = el("input", { type: "date", value: inbox.expires || "", id: "inbox-expires" });
+    expires.addEventListener("change", () => { inbox.expires = expires.value; saveInbox(); renderNotice(); });
     const status = el("div", { className: "status" });
     const test = el("button", { type: "button", className: "tiny", textContent: "TEST" });
     test.onclick = async () => {
@@ -2242,7 +2260,7 @@ Every recommendation must say why: the target search phrase and intent, the data
           inbox.since = p.updated_at;
           inbox.seen = (await ghFetch(gh("/issues/" + inbox.pr + "/comments?per_page=100&since=" + encodeURIComponent(inbox.since)))).map(c => c.id);
         }
-        inbox.login = login; inbox.ok = true; saveInbox(); paint(); showClaude(); renderJobs();
+        inbox.login = login; inbox.ok = true; saveInbox(); paint(); showClaude(); inboxDown = ""; renderJobs();
         status.className = "status ok"; status.textContent = "Connected to “" + p.title + "” as " + login + ".";
       } catch (e) {
         inbox.ok = false; saveInbox(); paint(); showClaude();
@@ -2254,6 +2272,7 @@ Every recommendation must say why: the target search phrase and intent, the data
       el("div", { className: "small", textContent: "Sends a finished run to your Claude Code session through a GitHub pull request, and shows Claude's replies here. Needs a fine-grained GitHub token for this repo only, with Pull requests: Read and write." }),
       el("div", { className: "keyrow" }, repo, pr),
       el("div", { className: "keyrow" }, key, show, test),
+      el("label", { className: "small" }, "Token expires on (optional, shown when you make it): ", expires),
       el("a", { href: "https://github.com/settings/personal-access-tokens/new", target: "_blank", rel: "noopener", className: "small", textContent: "Make a GitHub token ↗" }),
       status);
   }
@@ -2362,7 +2381,11 @@ Every recommendation must say why: the target search phrase and intent, the data
           (pick ? "\n\n[Images to pick: tap CHOOSE at the top.]" : "") + (live?.url ? "\n\n[It's live: tap COPY LINK at the top.]" : ""), c.created_at);
       }
       inbox.seen = inbox.seen.slice(-200); saveInbox();
-    } catch {} finally { polling = false; }
+      if (inboxDown) { inboxDown = ""; renderNotice(); }
+    } catch (e) {
+      // a refused token means replies, jobs and MERGE IT stop silently, so say so; being offline is not worth a banner
+      if ([401, 403, 404].includes(e.status) && inboxDown !== e.message) { inboxDown = e.message; renderNotice(); }
+    } finally { polling = false; }
   }
   // Screenshots in Claude's replies: markdown images hosted in the inbox repo itself (GitHub raw files or its Pages site)
   // are shown under the reply. Images from anywhere else stay as plain text, since the repo is public.
