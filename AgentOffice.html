@@ -181,7 +181,9 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 :root[data-skin="ps2"] canvas#office{background:#0a0e24}
 :root[data-skin="tactics"] .round-btn{font-size:20px;background:#b8283a;border-color:#5a0f18;box-shadow:0 4px 0 #5a0f18}
 :root[data-skin="tactics"] .round-btn.b{background:#2c4f9e;border-color:#12244f;box-shadow:0 4px 0 #12244f}
-.gear{margin-left:auto;background:none;border:0;box-shadow:none;color:#b8b4e8;font:16px var(--px);padding:6px 8px;min-width:44px;min-height:36px}
+.health{margin-left:auto;background:none;border:0;box-shadow:none;font:8px/1 var(--px);padding:6px 4px;min-height:36px;color:#7be38a;white-space:nowrap}
+.health.warn{color:#ffc857}.health.bad{color:#ff6b6b}
+.gear{margin-left:0;background:none;border:0;box-shadow:none;color:#b8b4e8;font:16px var(--px);padding:6px 8px;min-width:44px;min-height:36px}
 .gear[aria-expanded="true"]{color:var(--gold)}
 .settings{display:flex;flex-direction:column;gap:16px}
 .job{border:2px solid var(--win-edge);border-left:8px solid var(--claude);border-radius:6px;padding:10px;background:#fff;display:flex;flex-direction:column;gap:8px}
@@ -223,7 +225,7 @@ fieldset:disabled .lock{display:block}
 <body>
 <main>
   <section class="bezel" aria-label="Office view">
-    <div class="bezel-top"><span class="led" id="led"></span><span class="brand">AI RELAY <b>OFFICE</b></span><button type="button" class="gear" id="gear" aria-label="Settings: keys and team" aria-expanded="false" aria-controls="settings">⚙</button></div>
+    <div class="bezel-top"><span class="led" id="led"></span><span class="brand">AI RELAY <b>OFFICE</b></span><button type="button" class="health ok" id="healthLight" aria-label="Model status: open Connections">● READY</button><button type="button" class="gear" id="gear" aria-label="Settings: keys and team" aria-expanded="false" aria-controls="settings">⚙</button></div>
     <canvas id="office" width="240" height="160" tabindex="0" aria-label="Pixel office where your AI agents walk to the whiteboard to take their turn. Tap a teammate to read what they last said."></canvas>
   </section>
 
@@ -345,7 +347,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-06.1";
+  const APP_VERSION = "2026-11-07.1";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -525,7 +527,7 @@ fieldset:disabled .lock{display:block}
       el("label", {}, "Intern model", model),
       el("div", { className: "small", textContent: "Past the call limit, teammates stop delegating and answer on their own." }));
   }
-  const saveTeam = () => { store.set("team4", team); $("teamCount").textContent = team.length + " ON STAFF"; scene.sync(team); };
+  const saveTeam = () => { store.set("team4", team); paintHealth(); $("teamCount").textContent = team.length + " ON STAFF"; scene.sync(team); };
   PRESETS.forEach((p, i) => $("preset").appendChild(el("option", { value: i, textContent: p.label })));
 
   function renderTeam(){
@@ -1313,7 +1315,15 @@ fieldset:disabled .lock{display:block}
   // A model that hits a rate limit or quota rests until it should work again, so the next turn goes
   // straight to a backup instead of failing first. Daily quotas rest until midnight UTC.
   const health = store.get("health", {});
-  const saveHealth = () => { const now = Date.now(); for (const k in health) if (health[k].until <= now) delete health[k]; store.set("health", health); };
+  const saveHealth = () => { const now = Date.now(); for (const k in health) if (health[k].until <= now) delete health[k]; store.set("health", health); paintHealth(); };
+  // the light next to ⚙: green when the team's models are ready, amber when some are resting (backups step in), red when all are
+  function paintHealth(){
+    const b = $("healthLight"); if (!b || typeof team === "undefined") return;
+    const n = team.filter(resting).length;
+    b.className = "health " + (!n ? "ok" : n < team.length ? "warn" : "bad");
+    b.textContent = !n ? "● READY" : n < team.length ? "● " + n + " RESTING" : "● ALL RESTING";
+    b.title = !n ? "Every teammate's model is ready." : "Some models hit a limit and are resting; backups step in. Tap for details.";
+  }
   const hkey = a => a.provider + "/" + a.model;
   // OpenRouter's free limits (per minute and per day) cover the whole account, so when one free model hits them, every free model rests
   const POOL = "openrouter/*:free";
@@ -2498,6 +2508,9 @@ Every recommendation must say why: the target search phrase and intent, the data
     finally { setTimeout(() => { b.disabled = false; }, 3000); }
   };
 
+  $("healthLight").onclick = () => { openSettings("connPanel"); renderConns(); };
+  setInterval(() => { saveHealth(); }, 30000); // resting models come back on their own; keep the light current
+  paintHealth();
   setInterval(pollInbox, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollInbox(); checkUpdate(); } });
 
