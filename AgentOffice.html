@@ -347,7 +347,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-07.1";
+  const APP_VERSION = "2026-11-07.2";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -416,7 +416,7 @@ fieldset:disabled .lock{display:block}
     if (keys.length) {
       const reset = el("button", { type: "button", className: "tiny", textContent: "RESET" });
       reset.onclick = () => { keys.forEach(k => delete health[k]); saveHealth(); renderConns(); };
-      box.appendChild(el("div", { className: "rest" }, el("span", { textContent: "Resting: " + keys.map(k => (k === "openrouter/*:free" ? "all free OpenRouter models" : k.split("/").slice(1).join("/")) + " (" + health[k].why + " until " + new Date(health[k].until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ")").join(", ") }), reset));
+      box.appendChild(el("div", { className: "rest" }, el("span", { textContent: "Resting: " + keys.map(k => (k === "openrouter/*:free" ? "all free OpenRouter models" : /^[a-z]+\/\*$/.test(k) ? "all " + (PROVIDERS[k.split("/")[0]]?.name || k) + " models" : k.split("/").slice(1).join("/")) + " (" + health[k].why + (health[k].until >= PAUSED ? "" : " until " + new Date(health[k].until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })) + ")").join(", ") }), reset));
     }
     for (const pid in PROVIDERS) {
       const P = PROVIDERS[pid], c = conn[pid];
@@ -436,14 +436,17 @@ fieldset:disabled .lock{display:block}
         try { const ids = await fetchModels(pid); c.ok = true; saveConn(); paintChip(chip, c); flash(pid, "Connected. " + ids.length + " models.", "ok"); }
         catch (e) { c.ok = false; saveConn(); paintChip(chip, c); flash(pid, isNetErr(e) ? "Couldn't connect. You're offline or this provider blocks browser apps." : e.message, "err"); }
       };
-      const kids = [el("div", { className: "conn-head" }, el("b", { textContent: P.name }), chip), el("div", { className: "small", textContent: P.note })];
+      const pause = el("button", { type: "button", className: "tiny", textContent: isPaused(pid) ? "RESUME" : "PAUSE" });
+      pause.setAttribute("aria-label", (isPaused(pid) ? "Resume " : "Pause ") + P.name);
+      pause.onclick = () => { if (isPaused(pid)) delete health[pid + "/*"]; else health[pid + "/*"] = { until: PAUSED, why: "paused by you" }; saveHealth(); renderConns(); };
+      const kids = [el("div", { className: "conn-head" }, el("b", { textContent: P.name + (isPaused(pid) ? " · PAUSED" : "") }), chip), el("div", { className: "small", textContent: P.note })];
       if (pid === "custom") {
         const base = el("input", { className: "mono", value: c.base, placeholder: "https://example.com/v1", autocapitalize: "off", spellcheck: false, id: "base-custom" });
         base.setAttribute("aria-label", "Custom base URL");
         base.addEventListener("change", () => { c.base = base.value.trim(); c.ok = null; saveConn(); paintChip(chip, c); });
         kids.push(base);
       }
-      kids.push(el("div", { className: "keyrow" }, key, show, test));
+      kids.push(el("div", { className: "keyrow" }, key, show, test, c.key || pid === "custom" && c.base ? pause : ""));
       if (P.keyUrl) kids.push(el("a", { href: P.keyUrl, target: "_blank", rel: "noopener", className: "small", textContent: "Get a free key ↗" }));
       kids.push(status);
       box.appendChild(el("div", { className: "conn" }, ...kids));
@@ -1328,7 +1331,10 @@ fieldset:disabled .lock{display:block}
   // OpenRouter's free limits (per minute and per day) cover the whole account, so when one free model hits them, every free model rests
   const POOL = "openrouter/*:free";
   const inPool = a => a.provider === "openrouter" && /:free$/.test(a.model || "");
-  const resting = a => Math.max(health[hkey(a)]?.until || 0, inPool(a) ? health[POOL]?.until || 0 : 0) > Date.now();
+  // the owner can pause a whole provider (⚙ → Connections); it then rests until RESUME, and backups take its turns
+  const PAUSED = 8.64e15; // far future: a pause never runs out by itself
+  const isPaused = pid => (health[pid + "/*"]?.until || 0) >= PAUSED;
+  const resting = a => Math.max(health[hkey(a)]?.until || 0, inPool(a) ? health[POOL]?.until || 0 : 0, health[a.provider + "/*"]?.until || 0) > Date.now();
   function markSick(a, err){
     if (!err || err.name === "AbortError" || isNetErr(err)) return;
     const m = String(err.message), now = Date.now();
@@ -1340,7 +1346,7 @@ fieldset:disabled .lock{display:block}
     else if (err.timedOut) { until = now + 5 * 60000; why = "too slow"; }
     if (until) { health[hkey(a)] = { until, why }; if (inPool(a) && /free-models-per-(day|min)/i.test(m)) health[POOL] = { until, why }; saveHealth(); }
   }
-  const restLabel = a => { const h = (health[hkey(a)]?.until || 0) > Date.now() ? health[hkey(a)] : health[POOL]; return h ? h.why + ", back " + new Date(h.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
+  const restLabel = a => { if (isPaused(a.provider)) return "paused by you, until you tap RESUME"; const h = (health[hkey(a)]?.until || 0) > Date.now() ? health[hkey(a)] : health[POOL]; return h ? h.why + ", back " + new Date(h.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
   // backups for one teammate: models that can see images for an image reviewer; otherwise other free models on
   // the same provider (when its list is loaded), then each connected provider's default
   const GOOD_FREE = ["nvidia/nemotron-3.5-super-vl:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]; // checked Nov 2, 2026
