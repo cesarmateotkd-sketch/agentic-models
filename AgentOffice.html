@@ -87,6 +87,16 @@ a{color:var(--helper)}
 .round-btn.b{background:#7a78c8;border-color:#2c2a6b;box-shadow:0 4px 0 #2c2a6b}
 .btn-label{font:8px var(--px);color:var(--muted);text-align:center;margin-top:6px}
 .status{font:9px/1.6 var(--px);color:var(--muted);min-height:1.6em}
+/* one-hand use: every button is at least 44px tall (Apple's tap size); START/STOP stay in thumb reach when the A/B buttons scroll away */
+button:not(.round-btn){min-height:44px}
+button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;gap:10px;align-items:center;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:var(--win);border-top:3px solid var(--win-edge);box-shadow:0 -4px 12px rgba(0,0,0,.35)}
+.dock[hidden]{display:none}
+.dock-status{flex:1;min-width:0;font:8px/1.6 var(--px);color:var(--ink);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.dock-time{font:8px var(--px);color:var(--muted);white-space:nowrap}
+.dock button{min-width:96px;font:10px var(--px)}
+.dock .go{background:#d83860 !important;color:#fff !important;border-color:#6a1838}
+body.docked{padding-bottom:76px}
 .status.err{color:var(--err)}.status.ok{color:var(--ok)}
 
 /* connections */
@@ -123,7 +133,7 @@ a{color:var(--helper)}
 .turn .more{margin-top:8px}
 .ctx-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .seg{display:inline-flex;border:2px solid var(--win-edge);border-radius:6px;overflow:hidden}
-.seg button{border:0;border-radius:0;box-shadow:none;padding:8px 12px;font:9px var(--px);background:transparent;color:var(--muted);min-height:36px}
+.seg button{border:0;border-radius:0;box-shadow:none;padding:8px 12px;font:9px var(--px);background:transparent;color:var(--muted);min-height:44px}
 .seg button[aria-checked="true"]{background:var(--win-edge);color:var(--win)}
 .seg button:disabled{opacity:1}
 .rest{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:13px/1.35 var(--body);color:var(--muted)}
@@ -334,6 +344,10 @@ fieldset:disabled .lock{display:block}
     <div class="stack" id="history"></div>
   </details>
 </main>
+<div class="dock" id="dock" hidden role="region" aria-label="Quick start">
+  <div class="dock-status" id="dockStatus" aria-live="polite"></div><span class="dock-time" id="dockTime"></span>
+  <button type="button" class="go" id="dockGo">▶ START</button>
+</div>
 
 <script>
 (() => {
@@ -347,7 +361,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-07.5";
+  const APP_VERSION = "2026-11-07.6";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -2588,6 +2602,33 @@ Every recommendation must say why: the target search phrase and intent, the data
   if (inboxReady()) pollInbox();
   checkUpdate();
   $("settings").appendChild(el("div", { className: "small", textContent: "App version " + APP_VERSION }));
+  // iOS Safari only shows :active pressed states when the page listens for touches
+  document.addEventListener("touchstart", () => {}, { passive: true });
+  // thumb dock: when the A/B buttons are off screen, START (or STOP during a run) and the run's progress sit at the bottom
+  (() => {
+    const dock = $("dock"), go = $("dockGo"), ds = $("dockStatus"), dt = $("dockTime"), runBtn = $("run"), stopBtn = $("stop"), form = $("taskForm");
+    let abVisible = true, formVisible = true, started = 0;
+    const running = () => !stopBtn.disabled;
+    const mm = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+    function paint(){
+      const show = !abVisible && (formVisible || running());
+      dock.hidden = !show; document.body.classList.toggle("docked", show);
+      if (running()) { if (!started) started = Date.now(); } else started = 0;
+      go.textContent = running() ? "■ STOP" : "▶ START"; go.classList.toggle("go", !running());
+      go.setAttribute("aria-label", running() ? "Stop the run" : "Start the run");
+      ds.textContent = $("status").textContent || (running() ? "WORKING…" : "Ready when you are.");
+      dt.textContent = started ? mm(Date.now() - started) : "";
+    }
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(e => { abVisible = e[0].intersectionRatio >= .9; paint(); }, { threshold: [0, .9, 1] }).observe(runBtn.closest(".controls"));
+      new IntersectionObserver(e => { formVisible = e[0].isIntersecting; paint(); }).observe(form);
+    }
+    new MutationObserver(paint).observe($("status"), { childList: true, characterData: true, subtree: true });
+    new MutationObserver(paint).observe(stopBtn, { attributes: true, attributeFilter: ["disabled"] });
+    setInterval(() => { if (!dock.hidden && started) paint(); }, 1000);
+    go.onclick = () => running() ? stopBtn.click() : form.requestSubmit ? form.requestSubmit(runBtn) : runBtn.click();
+    paint();
+  })();
 })();
 </script>
 </body>
