@@ -347,7 +347,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-07.4";
+  const APP_VERSION = "2026-11-07.5";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -1097,13 +1097,14 @@ fieldset:disabled .lock{display:block}
       v.fillStyle = vg; v.fillRect(0, 0, 240, 160); v.fillStyle = "rgba(255,190,140,.05)"; v.fillRect(0, 0, 240, 160);
       X = ctx;
     }
+    let psPhase = "day";
     function roomPS2(){
       if (!psBg) bakePS2();
       X = ctx;
       ctx.drawImage(psBg, 0, 0, 240, 160);
       // the windows follow the phone's clock: day, dawn/dusk, night
       const now = new Date(), hr = now.getHours() + now.getMinutes() / 60;
-      const phase = hr >= 7.5 && hr < 17 ? "day" : (hr >= 5.5 && hr < 7.5) || (hr >= 17 && hr < 19.5) ? "dusk" : "night";
+      const phase = psPhase = hr >= 7.5 && hr < 17 ? "day" : (hr >= 5.5 && hr < 7.5) || (hr >= 17 && hr < 19.5) ? "dusk" : "night";
       if (phase !== "day") WINDOWS.forEach(([wx, ww]) => {
         ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip();
         Q(wx, 5, ww, 15, phase === "dusk" ? lg(0, 5, 0, 20, [[0, "#3a3c86"], [.55, "#d8708a"], [1, "#ffc27a"]]) : lg(0, 5, 0, 20, [[0, "#060a22"], [1, "#1c2858"]]));
@@ -1186,7 +1187,18 @@ fieldset:disabled .lock{display:block}
       Q(s.dx + 3, y - 9, 11, 8, lg(0, y - 9, 0, y - 1, [[0, "#3a4062"], [1, "#151828"]]));
       Q(s.dx + 4, y - 8, 9, 6, busy ? lg(0, y - 8, 0, y - 2, [[0, "#9fe4ff"], [1, "#3a8ad8"]]) : lg(0, y - 8, 0, y - 2, [[0, "#2a4a78"], [1, "#16263e"]]));
       if (busy) { for (let i = 0; i < 3; i++) Q(s.dx + 5, y - 7 + i * 1.6, 2 + ((Math.floor(t * 3) + i * 2) % 5), .6, "rgba(255,255,255,.85)"); glow(s.dx + 8.5, y - 4, 12, "rgba(120,200,255,1)", .35); }
-      else Q(s.dx + 4.5, y - 7.5, 3, .5, "rgba(255,255,255,.25)");
+      else {
+        // idle screens run a PS2-style screensaver: soft orbs drifting across the dark glass
+        ctx.save(); ctx.beginPath(); ctx.rect(s.dx + 4, y - 8, 9, 6); ctx.clip();
+        [["#6fa8ff", 0], ["#b48cff", 2.1], ["#6fe0c8", 4.2]].forEach(([c, o]) => {
+          const k = reduce ? o : t * .7 + o + s.dx * .05, ox = s.dx + 8.5 + Math.sin(k * 1.3) * 3.5, oy = y - 5 + Math.cos(k) * 2;
+          const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, 2.4); g.addColorStop(0, c); g.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.globalAlpha = .55; ctx.fillStyle = g; ctx.fillRect(ox - 2.4, oy - 2.4, 4.8, 4.8); });
+        ctx.restore();
+        Q(s.dx + 4.5, y - 7.5, 3, .5, "rgba(255,255,255,.25)");
+      }
+      // after dark the screens light the desk and floor in front of them
+      if (psPhase === "night") glow(s.dx + 8.5, y + 6, busy ? 16 : 9, busy ? "rgba(120,200,255,1)" : "rgba(150,140,255,1)", busy ? .22 : .12);
       Q(s.dx + 7.5, y - 1, 2, 1.5, "#22263a"); Q(s.dx + 6, y + .2, 5, .8, "#3a4062");
     }
     function bubblePS(x, y, type){
