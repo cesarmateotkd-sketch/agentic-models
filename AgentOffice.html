@@ -347,7 +347,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-07.2";
+  const APP_VERSION = "2026-11-07.3";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
@@ -1101,18 +1101,41 @@ fieldset:disabled .lock{display:block}
       if (!psBg) bakePS2();
       X = ctx;
       ctx.drawImage(psBg, 0, 0, 240, 160);
-      // drifting clouds
-      WINDOWS.forEach(([wx, ww]) => {
-        ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip(); ctx.fillStyle = "rgba(255,255,255,.85)";
+      // the windows follow the phone's clock: day, dawn/dusk, night
+      const now = new Date(), hr = now.getHours() + now.getMinutes() / 60;
+      const phase = hr >= 7.5 && hr < 17 ? "day" : (hr >= 5.5 && hr < 7.5) || (hr >= 17 && hr < 19.5) ? "dusk" : "night";
+      if (phase !== "day") WINDOWS.forEach(([wx, ww]) => {
+        ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip();
+        Q(wx, 5, ww, 15, phase === "dusk" ? lg(0, 5, 0, 20, [[0, "#3a3c86"], [.55, "#d8708a"], [1, "#ffc27a"]]) : lg(0, 5, 0, 20, [[0, "#060a22"], [1, "#1c2858"]]));
+        if (phase === "night") {
+          for (let i = 0; i < 9; i++) { const sx = wx + (i * 13.7 + wx) % ww, sy = 5.5 + (i * 5.3) % 7; Q(sx, sy, .5, .5, "rgba(255,255,255," + (reduce ? .8 : .45 + .35 * Math.sin(t * 2 + i)).toFixed(2) + ")"); }
+          if (wx === WINDOWS[1][0]) { X.beginPath(); X.arc(wx + ww - 9, 9, 2.2, 0, Math.PI * 2); X.fillStyle = "#fff6d8"; X.fill(); glow(wx + ww - 9, 9, 6, "rgba(255,246,216,1)", .35); }
+        } else glow(wx + ww / 2, 21, 18, "rgba(255,190,120,1)", .35);
+        for (let i = 0; i < 9; i++) { const bx = wx + i * 5.3, bh = 4 + (i * 7 % 5) * 1.5; Q(bx, 20 - bh - 2, 4, bh + 2, phase === "night" ? "rgba(26,32,64,.95)" : "rgba(120,90,140,.6)");
+          if (phase === "night" && i % 2) Q(bx + 1.5, 20 - bh - .5, .5, .5, "rgba(255,226,150,.8)"); }
+        for (let i = 0; i < 7; i++) { const bx = wx + 1 + i * 6.6, bh = 3 + (i * 5 % 4) * 1.6; Q(bx, 20 - bh, 5, bh, phase === "night" ? "#0e1230" : "rgba(64,48,92,.9)");
+          for (let k = 0; k < bh - 1; k += 1.5) if (phase === "dusk" || (i + Math.round(k / 1.5)) % 3 !== 1) Q(bx + 1 + (k * 3 % 3), 20 - bh + .5 + k, .5, .5, phase === "night" ? "rgba(255,214,120,.95)" : "rgba(255,230,150,.7)"); }
+        Q(wx + ww / 2 - 1, 5, 2, 15, lg(wx + ww / 2 - 1, 0, wx + ww / 2 + 1, 0, [[0, "#c8d0ec"], [1, "#6a76a0"]])); Q(wx, 12, ww, 1, "#b8c0dc");
+        ctx.restore();
+      });
+      // drifting clouds (sunset-tinted at dusk, none at night)
+      if (phase !== "night") WINDOWS.forEach(([wx, ww]) => {
+        ctx.save(); ctx.beginPath(); ctx.rect(wx, 5, ww, 15); ctx.clip(); ctx.fillStyle = phase === "dusk" ? "rgba(255,200,190,.75)" : "rgba(255,255,255,.85)";
         const cx = wx + ((t * 3 + wx) % (ww + 16)) - 10;
         [[0, 8, 4, 1.8], [3, 7, 3.5, 2.2], [6, 8, 3.5, 1.6]].forEach(([dx, cy, rx, ry]) => { ctx.beginPath(); ctx.ellipse(cx + dx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); });
         ctx.restore();
       });
+      // after dark the floor dims, so desks, monitors and people (drawn later) glow against it
+      if (phase === "night") Q(0, 26, 240, 134, "rgba(8,10,40,.28)");
+      else if (phase === "dusk") Q(0, 26, 240, 134, "rgba(80,30,60,.10)");
       ctx.font = "8px 'Press Start 2P'"; ctx.textBaseline = "top"; ctx.fillStyle = "#2a2f48";
       ctx.fillText(round ? "R" + round : "TO DO", 95, 7);
       marks.slice(-14).forEach((c, i) => Q(95 + (i % 7) * 7, 16 + Math.floor(i / 7) * 3, 5, 2, c));
-      const a = t * .5; ctx.strokeStyle = "#2a2f48"; ctx.lineWidth = .6; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168, 7.5); ctx.stroke();
-      ctx.strokeStyle = "#d83838"; ctx.lineWidth = .4; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168 + Math.cos(a) * 4.5, 11 + Math.sin(a) * 4.5); ctx.stroke();
+      // the wall clock tells the real time
+      const ha = ((now.getHours() % 12) + now.getMinutes() / 60) / 12 * Math.PI * 2 - Math.PI / 2, ma = (now.getMinutes() + now.getSeconds() / 60) / 60 * Math.PI * 2 - Math.PI / 2;
+      ctx.strokeStyle = "#2a2f48"; ctx.lineCap = "round"; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168 + Math.cos(ha) * 2.8, 11 + Math.sin(ha) * 2.8); ctx.stroke();
+      ctx.lineWidth = .5; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168 + Math.cos(ma) * 4.3, 11 + Math.sin(ma) * 4.3); ctx.stroke();
+      const sa = now.getSeconds() / 60 * Math.PI * 2 - Math.PI / 2; ctx.strokeStyle = "#d83838"; ctx.lineWidth = .3; ctx.beginPath(); ctx.moveTo(168, 11); ctx.lineTo(168 + Math.cos(sa) * 4.6, 11 + Math.sin(sa) * 4.6); ctx.stroke(); ctx.lineCap = "butt";
       glow(165, 39, 9, "rgba(120,180,255,1)", .25); glow(191, 39, 9, "rgba(120,220,190,1)", .22);
       if (!reduce) WINDOWS.forEach(([wx]) => { for (let i = 0; i < 6; i++) {
         const k = (t * 4 + i * 11) % 60; Q(wx + 6 + i * 7 + k * .45, 30 + k, .5, .5, "rgba(255,240,210," + (.5 - k / 140).toFixed(2) + ")"); } });
