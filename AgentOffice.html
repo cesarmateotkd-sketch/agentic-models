@@ -177,7 +177,7 @@ details.interns>summary{font:9px/1.6 var(--px);color:var(--muted);cursor:pointer
 :root[data-skin="ps2"] body{background-image:radial-gradient(ellipse at top,rgba(110,140,255,.18),transparent 60%),linear-gradient(#0a0e24,#04050d)}
 :root[data-skin="ps2"] .brand{color:#9fd0ff}
 :root[data-skin="ps2"] :is(input,textarea,select,button:not(.round-btn):not(.gear),.agent,.turn,.job,.hist){background:#0d1230;color:var(--ink)}
-:root[data-skin="ps2"] ::placeholder{color:#6a76a8}
+:root[data-skin="ps2"] ::placeholder{color:#8a96c8}
 :root[data-skin="ps2"] canvas#office{background:#0a0e24}
 :root[data-skin="tactics"] .round-btn{font-size:20px;background:#b8283a;border-color:#5a0f18;box-shadow:0 4px 0 #5a0f18}
 :root[data-skin="tactics"] .round-btn.b{background:#2c4f9e;border-color:#12244f;box-shadow:0 4px 0 #12244f}
@@ -347,7 +347,7 @@ fieldset:disabled .lock{display:block}
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // bump on every release; the app compares it with the live file to spot a stale copy on the phone
-  const APP_VERSION = "2026-11-07.3";
+  const APP_VERSION = "2026-11-07.4";
   const SKINS = ["office", "matrix", "tactics", "ps2"];
   let skin = SKINS.includes(store.get("skin", "office")) ? store.get("skin", "office") : "office";
   const isMatrix = () => skin === "matrix", isTactics = () => skin === "tactics", isPS2 = () => skin === "ps2";
