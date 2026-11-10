@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-08",
+  "updated": "2026-11-10",
   "priorities": [
     "ROI first: the quiz drives most Amazon clicks, so send readers into it at their type (https://hairtypequiz.hair/?type=4C).",
     "Pinterest is the biggest channel after direct: 1-3 pins a day, each linking to a post or the quiz.",
@@ -7,10 +7,10 @@
     "Evidence-led: cite PubMed for any claim; mark untested claims \"not studied\"."
   ],
   "data": [
-    "Nov 7, 2026: evidence tables on wash 4C, scalp care, baggy method, protective styles, 4A routine; new titles on 3C/2B routines, hot oil, gels, pre-poo.",
-    "Mailchimp, Nov 8, 2026: 19 subscribers; the welcome email was paused from May 2, so most never got the checklist.",
-    "GA4, Oct 8-Nov 6, 2026: about 400 sessions, 99 quiz completions, 41 Amazon clicks (30 from the quiz).",
-    "Search Console, Aug 1-Oct 29, 2026: 4C protein frequency at position 8.5-10.3; \"does 4c hair grow slower\" 10.6; sulfate-free shampoo questions 9.4-11; \"3b vs 3c\" 11.6."
+    "Search Console, Nov 10, 2026: 40 of 61 pages indexed. Weekly impressions 1,108 (Oct 20-26) to 1,653 (Nov 3-9); 3-6 clicks a week; avg position ~31.",
+    "Nov 7-10, 2026: evidence tables on 6 skipped pages (wash 4C, scalp, baggy, protective styles, 4A, find your type); checklist signup on 4A-4C quiz results.",
+    "Mailchimp, Nov 10, 2026: 11 subscribers; free plan, no welcome email; the thank-you page gives the checklist.",
+    "GA4, Aug 12-Nov 10, 2026: quiz homepage 65 of 86 Amazon clicks; best blog rate: curl creams for 4C (3 clicks/6 views)."
   ],
   "facts": [
     "African hair grew more slowly on average: about 3.7 vs 5.7 inches a year (PMIDs 11531795, 27019510; grouped by ethnicity, not curl type).",
