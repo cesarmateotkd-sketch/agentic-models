@@ -50,13 +50,15 @@ The free models can't browse, so RESEARCH FIRST (under START) sends the task to 
 ### Moving workflow (owner request, Oct 27, 2026)
 Whenever a job finishes (its handoff is handled) or a merge goes live, post the next job from the backlog below as a job card, so there's always one waiting for the owner's RUN. Only one open job at a time unless the owner asks for more. Jobs never publish anything; publishing still needs the owner's approval. Put all the context the team needs in `task`, including real data (GSC numbers with dates, page URLs), because the free models don't know Strand's post numbers or pages and can't browse.
 
-Strand backlog (top first; update it as items close):
-1. Evidence passes on high-impression pages with no sources (same pattern as Nov 19: answer-first intro, "What research shows" table, unsourced claims removed, product ingredients checked against brand lists). Done Nov 19: low porosity, high porosity, best gels, hot oil. Next: protein treatment (pos 14), pre-poo (pos 20), castor oil (pos 61), LOC method (pos 40).
-2. Backlinks (domain rating 0): outreach sent Nov 19 from the owner's Gmail to Hair Is Curly, Curl Warehouse, Quicksilver Hair, CurlsBot; guest article submitted to Naturally You! (form). Feedspot listing is the owner's (Cloudflare blocks automation). Follow up once after 7 days (Nov 26); write accepted guest posts as previews.
-3. Indexing: Nov 18, 44 of 61 indexed. Sitemap resubmitted Nov 19 (61 URLs read); IndexNow (Bing) set up Nov 19. Owner requests ~10/day from the priority list (day 1 done Nov 19).
-4. Pinterest video pins (Hyperframes, free): owner picked low porosity, 3C low porosity, high porosity on Nov 19; owner posts 1/day.
-5. Quiz data page: hair_type GA4 dimension registered Nov 19; build once ~100 results exist (early January).
-6. Email: thank-you redirect and quiz-results signup box live Nov 10; 0 signups Nov 11-17.
+Strand backlog (top first; reordered Nov 24 at the owner's request: links first, then pages already near page 1):
+1. Backlinks (domain rating 0; 89% of impressions sit at position 21+ in Oct 24-Nov 21 GSC, so authority is the bottleneck). Lead with the myths page (`blog/hair-myths-vs-evidence.html`, one anchor per claim). Sent so far: Hair Is Curly, Curl Warehouse, Quicksilver Hair, CurlsBot (Nov 19), Naturally You! form (Nov 19), The Beauty Web, The Mestiza Muse (Nov 22), Big Head Justice, Natural Haircare News (Nov 24). One follow-up each after 7 days. Free links only; no link swaps. Journalist-request platforms (HARO, Source of Sources, Qwoted, Featured) need the owner's sign-up. Feedspot listing is the owner's (Cloudflare blocks automation).
+2. Near-page-1 pages (GSC Oct 24-Nov 21): "what routine works best for 3c curls with low porosity" pos 7.1, "does 4c hair grow slower" pos 9.6, 3B vs 3C pos 18.7, "2b hair products" pos 19.7. Tune title/intro/section; small fixes go live after check_pages.
+3. Hair porosity test research pass (supports "low porosity hair", the top query: 265 impressions, pos 41).
+4. Evidence passes still open: pre-poo (pos 20), then 3A and 2B routines. Done: low/high porosity, gels, hot oil (Nov 19), protein, LOC, castor oil (Nov 23).
+5. Indexing: one ranked list in strandhair `.claude/indexing-queue.md`, 10 a night.
+6. Pinterest pins: owner picks in the app, posts 1/day.
+7. Quiz data page (digital PR asset): 22 hair_type results Nov 19-24; build at ~100 (mid/late December).
+8. Email: thank-you redirect and quiz-results signup box live Nov 10.
 
 ### Muse (removed Oct 29, 2026)
 A Muse link (Meta's agent app posting jobs on PR #1 through its GitHub connector) went live Oct 28 and was removed at the owner's request on Oct 29: Muse only acts when messaged, so it can't be woken by the app like the other agents. Don't rebuild it until Muse can react to events (webhooks or triggers) and the owner asks again.
